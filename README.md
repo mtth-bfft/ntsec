@@ -2,7 +2,8 @@
 
 ## Usage
 
-`ntsec.exe [options] <operations>`
+```
+ntsec.exe [options] <operations>
 
 Operations are processed *from left to right*. By default, the calling process is selected.
 Some operations might fail because you lack some privileges, in which case you will be prompted
@@ -57,3 +58,4 @@ Options:
    -v --verbose                  increase verbosity (can be repeated)
    -h --help                     display this help text
    -V --version                  display the current version
+```
