@@ -148,17 +148,23 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\accessright.c" />
+    <ClCompile Include="src\files.c" />
     <ClCompile Include="src\main.c" />
     <ClCompile Include="src\nt.c" />
     <ClCompile Include="src\process.c" />
     <ClCompile Include="src\registry.c" />
+    <ClCompile Include="src\securitydescriptor.c" />
     <ClCompile Include="src\token.c" />
     <ClCompile Include="src\utils.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\accessright.h" />
+    <ClInclude Include="include\files.h" />
     <ClInclude Include="include\nt.h" />
     <ClInclude Include="include\process.h" />
     <ClInclude Include="include\registry.h" />
+    <ClInclude Include="include\securitydescriptor.h" />
     <ClInclude Include="include\token.h" />
     <ClInclude Include="include\utils.h" />
   </ItemGroup>

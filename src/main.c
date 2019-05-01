@@ -6,6 +6,9 @@
 #include "registry.h"
 #include "token.h"
 #include "nt.h"
+#include "securitydescriptor.h"
+#include "accessright.h"
+#include "files.h"
 #include "utils.h"
 
 int verbosity = 0;
@@ -172,13 +175,13 @@ int _tmain(int argc, PCTSTR argv[])
       }
       else if (_tcsicmp(TEXT("--show-sddl"), arg) == 0)
       {
-         res = do_show_sd(targetType, swzTarget, FALSE);
+         res = print_target_sd(targetType, swzTarget, FALSE);
          if (res != 0)
             goto cleanup;
       }
       else if (_tcsicmp(TEXT("--show-sd"), arg) == 0)
       {
-         res = do_show_sd(targetType, swzTarget, TRUE);
+         res = print_target_sd(targetType, swzTarget, TRUE);
          if (res != 0)
             goto cleanup;
       }
@@ -191,7 +194,7 @@ int _tmain(int argc, PCTSTR argv[])
          print_token(hToken);
       }
       else if (_tcsicmp(TEXT("--open-token"), arg) == 0)
-         {
+      {
          if (targetType == TARGET_PROCESS)
          {
             targetType = TARGET_PRIMARY_TOKEN;
@@ -390,6 +393,28 @@ int _tmain(int argc, PCTSTR argv[])
          DeleteProcThreadAttributeList(pAttrList);
          safe_free(pAttrList);
          _tprintf(TEXT(" [.] Token stolen by child process %u executing %s\n"), procInfo.dwProcessId, swzTargetCommand);
+      }
+      else if (_tcsicmp(TEXT("--files-with"), arg) == 0)
+      {
+         if (argn == argc - 1)
+         {
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --files-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
+         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: option --files-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = enumerate_files_with(dwDesiredAccess);
+         if (res != 0)
+            goto cleanup;
       }
       else
       {

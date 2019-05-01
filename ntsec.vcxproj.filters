@@ -33,6 +33,15 @@
     <ClCompile Include="src\nt.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\accessright.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\files.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\securitydescriptor.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\token.h">
@@ -48,6 +57,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\nt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\accessright.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\files.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\securitydescriptor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

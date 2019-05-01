@@ -52,3 +52,15 @@ BOOL str_starts_with(PCTSTR swzFull, PCTSTR swzPrefix)
    return (_tcsnicmp(swzFull, swzPrefix, _tcslen(swzPrefix)) == 0);
 }
 
+UNICODE_STRING* string_to_unicode(PCTSTR swzIn)
+{
+   PUNICODE_STRING pUS = safe_alloc(sizeof(UNICODE_STRING) + (_tcslen(swzIn) + 1) * sizeof(WCHAR));
+   pUS->Length = pUS->MaximumLength = (USHORT)_tcslen(swzIn);
+   pUS->Buffer = (PWCHAR)(((PBYTE)pUS) + sizeof(UNICODE_STRING));
+#ifdef UNICODE
+   memcpy(pUS->Buffer, swzIn, wcslen(swzIn) * sizeof(WCHAR));
+#else
+   swprintf_s(pUS->Buffer, strlen(swzIn), L"%hs", swzIn);
+#endif
+   return pUS;
+}

@@ -3,6 +3,8 @@
 #include <sddl.h>
 #include <stdio.h>
 #include "token.h"
+#include "securitydescriptor.h"
+#include "nt.h"
 #include "utils.h"
 
 #define MAX_PRIVILEGE_NAME_LEN 45
@@ -144,55 +146,6 @@ BOOL has_privilege_caller(PCTSTR swzPrivName)
    bRes = has_privilege(hToken, swzPrivName);
    CloseHandle(hToken);
    return bRes;
-}
-
-int print_sid(FILE *out, PSID pSID)
-{
-   int res = 0;
-   PWSTR swzSID = NULL;
-   if (!ConvertSidToStringSidW(pSID, &swzSID))
-   {
-      res = GetLastError();
-      _ftprintf(out, TEXT("(unknown SID, code %u)"), res);
-   }
-   else
-   {
-      _ftprintf(out, TEXT("%ws"), swzSID);
-   }
-   return res;
-}
-
-int print_resolved_sid(FILE *out, PSID pSID)
-{
-   int res = 0;
-   DWORD dwAccountLen = 0;
-   DWORD dwDomainLen = 0;
-   SID_NAME_USE sidUse;
-   PWSTR swzAccount = NULL;
-   PWSTR swzDomain = NULL;
-   if (LookupAccountSidW(NULL, pSID, NULL, &dwAccountLen, NULL, &dwDomainLen, &sidUse) ||
-      GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-   {
-      res = GetLastError();
-      _ftprintf(out, TEXT("unknown SID (code %u)"), res);
-      goto cleanup;
-   }
-   swzAccount = safe_alloc(dwAccountLen * sizeof(WCHAR));
-   swzDomain = safe_alloc(dwDomainLen * sizeof(WCHAR));
-   if (!LookupAccountSidW(NULL, pSID, swzAccount, &dwAccountLen, swzDomain, &dwDomainLen, &sidUse))
-   {
-      res = GetLastError();
-      _ftprintf(out, TEXT("unknown SID (code %u)"), res);
-      goto cleanup;
-   }
-   _ftprintf(out, TEXT("%ws\\%ws"), swzDomain, swzAccount);
-
-cleanup:
-   if (swzAccount != NULL)
-      safe_free(swzAccount);
-   if (swzDomain != NULL)
-      safe_free(swzDomain);
-   return res;
 }
 
 int get_token_info(HANDLE hToken, TOKEN_INFORMATION_CLASS infoClass, PVOID *ppResult, PDWORD pdwResultLen)
@@ -452,27 +405,45 @@ cleanup:
    return res;
 }
 
-int print_sddl(PSECURITY_DESCRIPTOR pSD, DWORD dwSDFlags)
+int get_target_token(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, HANDLE *phToken)
 {
    int res = 0;
-   PTSTR swzSDDL = NULL;
+   HANDLE hTarget = INVALID_HANDLE_VALUE;
 
-   if (!ConvertSecurityDescriptorToStringSecurityDescriptor(pSD, SDDL_REVISION_1, dwSDFlags, &swzSDDL, NULL))
+   if (targetType == TARGET_PRIMARY_TOKEN || targetType == TARGET_PROCESS)
    {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: unable to convert security descriptor to string (error %u)\n"), res);
+      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hTarget);
+      if (res != 0)
+         goto cleanup;
+      if (!OpenProcessToken(hTarget, dwRightsRequired, phToken))
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Error: opening process token failed with code %u\n"), res);
+         goto cleanup;
+      }
+   }
+   else if (targetType == TARGET_IMPERSONATION_TOKEN || targetType == TARGET_THREAD)
+   {
+      res = open_target(swzTarget, TARGET_THREAD, THREAD_QUERY_INFORMATION, &hTarget);
+      if (res != 0)
+         goto cleanup;
+      if (!OpenThreadToken(hTarget, dwRightsRequired, TRUE, phToken))
+      {
+         res = GetLastError();
+         if (res == ERROR_NO_TOKEN)
+            _ftprintf(stderr, TEXT(" [!] Error: target thread is not impersonating, no token to open\n"));
+         else
+            _ftprintf(stderr, TEXT(" [!] Error: opening thread token failed with code %u\n"), res);
+         goto cleanup;
+      }
+   }
+   else
+   {
+      res = ERROR_INVALID_PARAMETER;
+      _ftprintf(stderr, TEXT(" [!] Error: cannot open target, target selected must be a process or thread\n"));
       goto cleanup;
    }
-   _tprintf(TEXT("%s\n"), swzSDDL);
 
 cleanup:
-   if (swzSDDL != NULL)
-      LocalFree(swzSDDL);
    return res;
-}
-
-int print_sd(PSECURITY_DESCRIPTOR pSD, DWORD dwSDFlags)
-{
-   // TODO: actual description
-   return print_sddl(pSD, dwSDFlags);
 }

@@ -1,7 +1,6 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
-#include <aclapi.h>
 #include "process.h"
 #include "registry.h"
 #include "token.h"
@@ -63,19 +62,6 @@ int resolve_imports()
 
 cleanup:
    return res;
-}
-
-UNICODE_STRING* string_to_unicode(PCTSTR swzIn)
-{
-   PUNICODE_STRING pUS = safe_alloc(sizeof(UNICODE_STRING) + (_tcslen(swzIn) + 1) * sizeof(WCHAR));
-   pUS->Length = pUS->MaximumLength = (USHORT)_tcslen(swzIn);
-   pUS->Buffer = (PWCHAR)(((PBYTE)pUS) + sizeof(UNICODE_STRING));
-#ifdef UNICODE
-   memcpy(pUS->Buffer, swzIn, wcslen(swzIn) * sizeof(WCHAR));
-#else
-   swprintf_s(pUS->Buffer, strlen(swzIn), L"%hs", swzIn);
-#endif
-   return pUS;
 }
 
 int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, HANDLE *phOut)
@@ -213,7 +199,6 @@ cleanup:
    return res;
 }
 
-
 int open_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
@@ -256,85 +241,3 @@ int open_kernel_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
    return res;
 }
 
-int do_show_sd(target_t targetType, PCTSTR swzTarget, BOOL bVerbose)
-{
-   int res = 0;
-   DWORD dwRes = 0;
-   HANDLE hTarget = INVALID_HANDLE_VALUE;
-   DWORD dwOpenRights = READ_CONTROL;
-   DWORD dwSDFlags = ATTRIBUTE_SECURITY_INFORMATION | ATTRIBUTE_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION;
-   PSECURITY_DESCRIPTOR pSD = NULL;
-
-   // Dump SACL information, only possible when privileged enough
-   if (has_privilege_caller(SE_SECURITY_NAME))
-   {
-      dwOpenRights |= ACCESS_SYSTEM_SECURITY;
-      dwSDFlags |= SACL_SECURITY_INFORMATION;
-      set_privilege_caller(SE_SECURITY_NAME, TRUE);
-   }
-
-   res = open_target(swzTarget, targetType, dwOpenRights, &hTarget);
-   if (res != 0)
-      goto cleanup;
-
-   dwRes = GetSecurityInfo(hTarget, SE_KERNEL_OBJECT, dwSDFlags, NULL, NULL, NULL, NULL, &pSD);
-   if (dwRes != ERROR_SUCCESS)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: unable to query security descriptor (error %u)\n"), res);
-      goto cleanup;
-   }
-
-   if (bVerbose)
-      res = print_sd(pSD, dwSDFlags);
-   else
-      res = print_sddl(pSD, dwSDFlags);
-
-cleanup:
-   if (pSD != NULL)
-      LocalFree(pSD);
-   return res;
-}
-
-int get_target_token(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, HANDLE *phToken)
-{
-   int res = 0;
-   HANDLE hTarget = INVALID_HANDLE_VALUE;
-
-   if (targetType == TARGET_PRIMARY_TOKEN || targetType == TARGET_PROCESS)
-   {
-      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hTarget);
-      if (res != 0)
-         goto cleanup;
-      if (!OpenProcessToken(hTarget, dwRightsRequired, phToken))
-      {
-         res = GetLastError();
-         _ftprintf(stderr, TEXT(" [!] Error: opening process token failed with code %u\n"), res);
-         goto cleanup;
-      }
-   }
-   else if (targetType == TARGET_IMPERSONATION_TOKEN || targetType == TARGET_THREAD)
-   {
-      res = open_target(swzTarget, TARGET_THREAD, THREAD_QUERY_INFORMATION, &hTarget);
-      if (res != 0)
-         goto cleanup;
-      if (!OpenThreadToken(hTarget, dwRightsRequired, TRUE, phToken))
-      {
-         res = GetLastError();
-         if (res == ERROR_NO_TOKEN)
-            _ftprintf(stderr, TEXT(" [!] Error: target thread is not impersonating, no token to open\n"));
-         else
-            _ftprintf(stderr, TEXT(" [!] Error: opening thread token failed with code %u\n"), res);
-         goto cleanup;
-      }
-   }
-   else
-   {
-      res = ERROR_INVALID_PARAMETER;
-      _ftprintf(stderr, TEXT(" [!] Error: cannot open target, target selected must be a process or thread\n"));
-      goto cleanup;
-   }
-
-   cleanup:
-   return res;
-}
