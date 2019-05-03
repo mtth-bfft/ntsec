@@ -32,7 +32,7 @@ static void print_usage()
    _ftprintf(stderr, TEXT("   -t --thread  <tid>|current          select the given thread by id, or ntsec's main and only thread\n"));
    _ftprintf(stderr, TEXT("   -r --regkey  <key>                  select the given registry key by name\n"));
    _ftprintf(stderr, TEXT("   -f --file    <path>                 select the given file or directory by NT or Win32 path\n"));
-   _ftprintf(stderr, TEXT("   -k --kernobj <nt_path>              select the given kernel object (mutex, semaphore, event, job, etc.) by NT path\n"));
+   _ftprintf(stderr, TEXT("   -o --ntobj   <nt_path>              select the given NT object (mutex, semaphore, event, job, etc.) by absolute NT path\n"));
    _ftprintf(stderr, TEXT("   -s --service <name>                 select the given service by name\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Generic operations for all types:\n"));
@@ -161,7 +161,7 @@ int _tmain(int argc, PCTSTR argv[])
          swzTarget = argv[++argn];
          targetType = TARGET_FILE;
       }
-      else if (_tcsicmp(TEXT("-k"), arg) == 0 || _tcsicmp(TEXT("--kernobj"), arg) == 0)
+      else if (_tcsicmp(TEXT("-o"), arg) == 0 || _tcsicmp(TEXT("--ntobj"), arg) == 0)
       {
          if (argn == argc - 1)
          {
@@ -171,7 +171,7 @@ int _tmain(int argc, PCTSTR argv[])
             goto cleanup;
          }
          swzTarget = argv[++argn];
-         targetType = TARGET_KERNEL_OBJECT;
+         targetType = TARGET_NT_OBJECT;
       }
       else if (_tcsicmp(TEXT("--show-sddl"), arg) == 0)
       {

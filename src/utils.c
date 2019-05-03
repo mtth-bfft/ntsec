@@ -55,7 +55,7 @@ BOOL str_starts_with(PCTSTR swzFull, PCTSTR swzPrefix)
 UNICODE_STRING* string_to_unicode(PCTSTR swzIn)
 {
    PUNICODE_STRING pUS = safe_alloc(sizeof(UNICODE_STRING) + (_tcslen(swzIn) + 1) * sizeof(WCHAR));
-   pUS->Length = pUS->MaximumLength = (USHORT)_tcslen(swzIn);
+   pUS->Length = pUS->MaximumLength = (USHORT)(_tcslen(swzIn) * sizeof(TCHAR));
    pUS->Buffer = (PWCHAR)(((PBYTE)pUS) + sizeof(UNICODE_STRING));
 #ifdef UNICODE
    memcpy(pUS->Buffer, swzIn, wcslen(swzIn) * sizeof(WCHAR));

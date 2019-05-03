@@ -7,8 +7,13 @@
 #include "utils.h"
 #include "nt.h"
 
-// This file handles the NT-specific-and-internal aspects
-// These structures and functions are mostly undocumented and can change from one release to the next
+PVOID pNTObjectTypes[][2] = {
+   { TEXT("Directory"), (PVOID)&open_nt_directory_object },
+   { NULL,              NULL}
+};
+
+#define OBJ_CASE_INSENSITIVE    0x00000040L
+#define STATUS_NO_MORE_ENTRIES  0x8000001AL
 
 #define InitializeObjectAttributes( p, n, a, r, s ) { \
    (p)->Length = sizeof( OBJECT_ATTRIBUTES );          \
@@ -19,26 +24,10 @@
    (p)->SecurityQualityOfService = NULL;               \
    }
 
-typedef struct _OBJECT_DIRECTORY_INFORMATION {
-   UNICODE_STRING Name;
-   UNICODE_STRING TypeName;
-} OBJECT_DIRECTORY_INFORMATION, *POBJECT_DIRECTORY_INFORMATION;
-
-typedef struct _OBJECT_ATTRIBUTES {
-   ULONG           Length;
-   HANDLE          RootDirectory;
-   PUNICODE_STRING ObjectName;
-   ULONG           Attributes;
-   PVOID           SecurityDescriptor;
-   PVOID           SecurityQualityOfService;
-}  OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
-
-typedef NTSTATUS(WINAPI *PNtOpenDirectoryObject)(
-   _Out_ PHANDLE            DirectoryHandle,
-   _In_  ACCESS_MASK        DesiredAccess,
-   _In_  POBJECT_ATTRIBUTES ObjectAttributes);
-
-static PNtOpenDirectoryObject NtOpenDirectoryObject;
+PNtOpenDirectoryObject NtOpenDirectoryObject = NULL;
+PNtQueryDirectoryObject NtQueryDirectoryObject = NULL;
+PNtOpenFile NtOpenFile = NULL;
+PNtQueryDirectoryFile NtQueryDirectoryFile = NULL;
 
 int resolve_imports()
 {
@@ -51,12 +40,32 @@ int resolve_imports()
       _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic imports, NTDLL load failed with code '%u'\n"), res);
       goto cleanup;
    }
-
    NtOpenDirectoryObject = (PNtOpenDirectoryObject)GetProcAddress(hNTDLL, "NtOpenDirectoryObject");
    if (NtOpenDirectoryObject == NULL)
    {
       res = GetLastError();
       _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenDirectoryObject, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtQueryDirectoryObject = (PNtQueryDirectoryObject)GetProcAddress(hNTDLL, "NtQueryDirectoryObject");
+   if (NtQueryDirectoryObject == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtQueryDirectoryObject, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenFile = (PNtOpenFile)GetProcAddress(hNTDLL, "NtOpenFile");
+   if (NtOpenFile == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenFile, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtQueryDirectoryFile = (PNtQueryDirectoryFile)GetProcAddress(hNTDLL, "NtQueryDirectoryFile");
+   if (NtQueryDirectoryFile == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtQueryDirectoryFile, failed with code '%u'\n"), res);
       goto cleanup;
    }
 
@@ -113,13 +122,13 @@ int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, H
       {
          if (_tcsicmp(swzTarget, TEXT("current")) == 0)
          {
-         lTID = GetCurrentThreadId();
+            lTID = GetCurrentThreadId();
          }
          else
          {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: option --thread requires a positive TID\n"));
-         goto cleanup;
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --thread requires a positive TID\n"));
+            goto cleanup;
          }
       }
       dwTargetTID = (DWORD)lTID;
@@ -183,11 +192,11 @@ int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, H
       }
       _tprintf(TEXT(" [.] Operating on impersonation token\n"));
    }
-   else if (targetType == TARGET_KERNEL_OBJECT)
+   else if (targetType == TARGET_NT_OBJECT)
    {
       res = open_kernel_object(swzTarget, dwRightsRequired, phOut);
       if (res == 0)
-         _tprintf(TEXT(" [.] Operating on kernel object %s\n"), swzTarget);
+         _tprintf(TEXT(" [.] Operating on NTR object %s\n"), swzTarget);
    }
    else
    {
@@ -199,7 +208,7 @@ cleanup:
    return res;
 }
 
-int open_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
    NTSTATUS status = 0;
@@ -211,9 +220,171 @@ int open_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOu
    if (status != STATUS_SUCCESS)
    {
       res = status;
-      _ftprintf(stderr, TEXT(" [!] Error: opening NT directory object '%s' failed with status 0x%08X\n"), swzNTPath, res);
+      _ftprintf(stderr, TEXT(" [!] Warning: opening NT directory object '%.*ws' failed with status 0x%08X\n"), pUSObjName->Length, pUSObjName->Buffer, res);
    }
+
+   safe_free(pUSObjName);
    return res;
+}
+
+int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   NTSTATUS status = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   IO_STATUS_BLOCK ioStatus = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenFile(phOut, dwRightsRequired, &objAttr, &ioStatus, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF);
+   if (status != STATUS_SUCCESS)
+   {
+      res = status;
+      _ftprintf(stderr, TEXT(" [!] Warning: opening NT file object '%.*ws' failed with status 0x%08X\n"), pUSObjName->Length, pUSObjName->Buffer, res);
+   }
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int foreach_nt_object(PCTSTR swzDirectoryNTPath, nt_object_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
+{
+   int res = 0;
+   HANDLE hDir = INVALID_HANDLE_VALUE;
+   ULONG ulBufferSize = 0x1000;
+   ULONG ulBufferReq = 0;
+   POBJECT_DIRECTORY_INFORMATION pBuffer = (POBJECT_DIRECTORY_INFORMATION)safe_alloc(ulBufferSize);
+   ULONG ulContext = 0;
+   NTSTATUS status = 0;
+   SIZE_T dwChildNTPathLen = _tcslen(swzDirectoryNTPath) + 1000 + 1;
+   PTSTR swzChildNTPath = safe_alloc(dwChildNTPathLen * sizeof(TCHAR));
+   PTSTR swzChildName = NULL;
+
+   if (swzDirectoryNTPath == NULL || pCallback == NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   _tcscpy_s(swzChildNTPath, dwChildNTPathLen, swzDirectoryNTPath);
+   if (swzChildNTPath[_tcslen(swzChildNTPath) - 1] != TEXT('\\'))
+      _tcscat_s(swzChildNTPath, dwChildNTPathLen, TEXT("\\"));
+   swzChildName = swzChildNTPath + _tcslen(swzChildNTPath);
+
+   res = open_nt_directory_object(swzDirectoryNTPath, DIRECTORY_QUERY | DIRECTORY_QUERY, &hDir);
+   if (res != 0)
+      goto cleanup;
+
+   status = NtQueryDirectoryObject(hDir, (PVOID)pBuffer, ulBufferSize, TRUE, TRUE, &ulContext, &ulBufferReq);
+   while (status == 0)
+   {
+      _tcsncpy_s(swzChildName, 1000, pBuffer->Name.Buffer, pBuffer->Name.Length);
+      if (_wcsnicmp(pBuffer->TypeName.Buffer, L"Directory", pBuffer->TypeName.Length / sizeof(WCHAR)) == 0 && bRecurse)
+      {
+         foreach_nt_object(swzChildNTPath, pCallback, pData, bRecurse);
+      }
+      res = pCallback(swzChildNTPath, &(pBuffer->TypeName), pData);
+      if (res != 0)
+         goto cleanup;
+      status = NtQueryDirectoryObject(hDir, (PVOID)pBuffer, ulBufferSize, TRUE, FALSE, &ulContext, &ulBufferReq);
+   }
+   if (status != STATUS_NO_MORE_ENTRIES)
+   {
+      res = status;
+      _ftprintf(stderr, TEXT(" [!] Warning: unable to list contents of NT directory %s, code 0x%08X\n"), swzDirectoryNTPath, status);
+      goto cleanup;
+   }
+
+   (void)(pCallback);
+   (void)(bRecurse);
+
+cleanup:
+   if (hDir != INVALID_HANDLE_VALUE && hDir != NULL && !CloseHandle(hDir))
+      _ftprintf(stderr, TEXT(" [!] Warning: unable to close NT directory object handle, code %u\n"), GetLastError());
+   if (pBuffer != NULL)
+      safe_free(pBuffer);
+   return res;
+}
+
+int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
+{
+   int res = 0;
+   HANDLE hDir = INVALID_HANDLE_VALUE;
+   ULONG ulFileBufSize = 0x1000;
+   PFILE_DIRECTORY_INFORMATION pFile = safe_alloc(ulFileBufSize);
+   IO_STATUS_BLOCK ioStatus = { 0 };
+   NTSTATUS status = STATUS_SUCCESS;
+   SIZE_T dwChildNTPathLen = _tcslen(swzDirectoryFileNTPath) + 1000 + 1;
+   PTSTR swzChildNTPath = safe_alloc(dwChildNTPathLen * sizeof(TCHAR));
+   PTSTR swzChildName = NULL;
+
+   if (swzDirectoryFileNTPath == NULL || pCallback == NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   _tcscpy_s(swzChildNTPath, dwChildNTPathLen, swzDirectoryFileNTPath);
+   if (swzChildNTPath[_tcslen(swzChildNTPath) - 1] != TEXT('\\'))
+      _tcscat_s(swzChildNTPath, dwChildNTPathLen, TEXT("\\"));
+   swzChildName = swzChildNTPath + _tcslen(swzChildNTPath);
+
+   res = open_nt_file_object(swzChildNTPath, FILE_LIST_DIRECTORY | SYNCHRONIZE, &hDir);
+   if (res != 0)
+      goto cleanup;
+
+   do
+   {
+      ZeroMemory(&ioStatus, sizeof(ioStatus));
+      status = NtQueryDirectoryFile(hDir, NULL, NULL, NULL, &ioStatus, pFile, ulFileBufSize, FileDirectoryInformation, TRUE, NULL, FALSE);
+      if (!NT_SUCCESS(status))
+      {
+         if (status == STATUS_NO_MORE_FILES)
+         {
+            break;
+         }
+         else if (status == STATUS_BUFFER_OVERFLOW)
+         {
+            ulFileBufSize *= 2;
+            pFile = safe_realloc(pFile, ulFileBufSize);
+            continue;
+         }
+         _ftprintf(stderr, TEXT(" [!] Warning: querying NT device object '%s' failed with status 0x%08X\n"), swzDirectoryFileNTPath, status);
+         goto cleanup;
+      }
+      else if (WaitForSingleObject(hDir, INFINITE) != WAIT_OBJECT_0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Warning: failed to wait for NT device object '%s' enum, code %u\n"), swzDirectoryFileNTPath, GetLastError());
+         break;
+      }
+      else if (!NT_SUCCESS(ioStatus._result.Status))
+      {
+         if (ioStatus._result.Status == STATUS_NO_MORE_FILES)
+            break;
+         _ftprintf(stderr, TEXT(" [!] Warning: querying NT device object '%s' failed with ioStatus 0x%08X\n"), swzDirectoryFileNTPath, ioStatus._result.Status);
+         goto cleanup;
+      }
+      else if (_wcsnicmp(pFile->FileName, L"..", pFile->FileNameLength / sizeof(WCHAR)) == 0)
+      {
+         continue;
+      }
+      _tcsncpy_s(swzChildName, 1000, pFile->FileName, pFile->FileNameLength / sizeof(WCHAR));
+
+      if (bRecurse && (pFile->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+         foreach_nt_directory_files(swzChildNTPath, pCallback, pData, bRecurse);
+
+      res = pCallback(swzChildNTPath, pData);
+      if (res != 0)
+         goto cleanup;
+   }
+   while (NT_SUCCESS(status));
+
+cleanup:
+   if (hDir != INVALID_HANDLE_VALUE && hDir != NULL && !CloseHandle(hDir))
+      _ftprintf(stderr, TEXT(" [!] Warning: failed to close handle %p, code %u\n"), hDir, GetLastError());
+   if (pFile != NULL)
+      safe_free(pFile);
+   return 0;
 }
 
 int open_kernel_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
@@ -230,7 +401,7 @@ int open_kernel_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
    dwNTPathLen = _tcslen(swzNTPath);
    if (swzNTPath[dwNTPathLen - 1] == TEXT('\\'))
    {
-      res = open_directory_object(swzNTPath, dwRightsRequired, phOut);
+      res = open_nt_directory_object(swzNTPath, dwRightsRequired, phOut);
    }
    else
    {
@@ -240,4 +411,3 @@ int open_kernel_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 
    return res;
 }
-
