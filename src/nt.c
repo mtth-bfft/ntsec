@@ -7,6 +7,12 @@
 #include "utils.h"
 #include "nt.h"
 
+typedef struct {
+   PCTSTR swzNTPath;
+   BOOL bFound;
+   PTSTR swzType;
+} nt_object_lookup_t;
+
 PVOID pNTObjectTypes[][2] = {
    { TEXT("Directory"), (PVOID)&open_nt_directory_object },
    { NULL,              NULL}
@@ -194,9 +200,9 @@ int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, H
    }
    else if (targetType == TARGET_NT_OBJECT)
    {
-      res = open_kernel_object(swzTarget, dwRightsRequired, phOut);
-      if (res == 0)
-         _tprintf(TEXT(" [.] Operating on NTR object %s\n"), swzTarget);
+      res = open_nt_object(swzTarget, dwRightsRequired, phOut);
+      if (res != 0)
+         goto cleanup;
    }
    else
    {
@@ -214,6 +220,9 @@ int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
    NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   if (pUSObjName->Length > sizeof(WCHAR) && pUSObjName->Buffer[(pUSObjName->Length / sizeof(WCHAR)) - 1] == TEXT('\\'))
+      pUSObjName->Length -= sizeof(WCHAR);
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
    status = NtOpenDirectoryObject(phOut, dwRightsRequired, &objAttr);
@@ -387,27 +396,91 @@ cleanup:
    return 0;
 }
 
-int open_kernel_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_object_with_type(PCTSTR swzNTPath, PCTSTR swzType, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   if (_tcsicmp(swzType, TEXT("Device")) == 0)
+      return open_nt_file_object(swzNTPath, dwRightsRequired, phOut);
+   else
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: cannot open unsupported NT object type %s (at %s)\n"), swzType, swzNTPath);
+      return ERROR_NOT_SUPPORTED;
+   }
+}
+
+static int callback_find_nt_object_type(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData)
+{
+   nt_object_lookup_t *pLookup = (nt_object_lookup_t*)pData;
+   if (_tcscmp(swzNTPath, pLookup->swzNTPath) == 0)
+   {
+      pLookup->bFound = TRUE;
+      pLookup->swzType = unicode_to_string(usObjType);
+      return 1; // stop enumerating
+   }
+   else
+   {
+      return 0;
+   }
+}
+
+int open_nt_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
    SIZE_T dwNTPathLen = 0;
+   PTSTR swzNTDirPath = NULL;
+   nt_object_lookup_t lookup = { 0 };
 
-   if (swzNTPath == NULL || *swzNTPath != TEXT('\\'))
+   if (swzNTPath == NULL || phOut == NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+   else if (*swzNTPath != TEXT('\\'))
    {
       _ftprintf(stderr, TEXT(" [!] Error: for kernel objects, an absolute NT path is required.\n"));
       res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
    }
 
    dwNTPathLen = _tcslen(swzNTPath);
    if (swzNTPath[dwNTPathLen - 1] == TEXT('\\'))
    {
+      _tprintf(TEXT(" [.] Operating on NT directory %s\n"), swzNTPath);
       res = open_nt_directory_object(swzNTPath, dwRightsRequired, phOut);
    }
    else
    {
-      printf(" Not implemented yet, work in progress ");
-      return -1;
+      lookup.bFound = FALSE;
+      lookup.swzNTPath = swzNTPath;
+      swzNTDirPath = safe_strdup(swzNTPath);
+      basedir(swzNTDirPath);
+      foreach_nt_object(swzNTDirPath, callback_find_nt_object_type, &lookup, FALSE);
+      if (!lookup.bFound)
+      {
+         _ftprintf(stderr, TEXT(" [!] Warning: object %s not found in %s\n"), swzNTPath, swzNTDirPath);
+         res = ERROR_NOT_FOUND;
+         goto cleanup;
+      }
+      _tprintf(TEXT(" [.] Operating on NT object %s of type %s\n"), swzNTPath, lookup.swzType);
+      res = open_nt_object_with_type(swzNTPath, lookup.swzType, dwRightsRequired, phOut);
    }
 
+cleanup:
+   if (swzNTDirPath != NULL)
+      safe_free(swzNTDirPath);
+   if (lookup.swzType != NULL)
+      safe_free(lookup.swzType);
    return res;
 }
+
+/*
+static int nt_object_callback(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData)
+{
+   int res = 0;
+
+
+}
+
+int enumerate_nt_objects_with(DWORD dwDesiredAccess)
+{
+   return foreach_nt_object(TEXT("\\"), nt_object_callback, &dwDesiredAccess, TRUE);
+}*/

@@ -156,7 +156,7 @@ extern PNtQueryDirectoryFile NtQueryDirectoryFile;
 
 int resolve_imports();
 int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, HANDLE *phOut);
-int open_kernel_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
+int open_nt_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int foreach_nt_object(PCTSTR swzNTPath, nt_object_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);

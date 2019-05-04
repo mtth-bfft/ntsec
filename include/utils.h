@@ -9,3 +9,5 @@ PVOID safe_dup(const VOID *pBuffer, SIZE_T dwBytes);
 PTSTR safe_strdup(PCTSTR swzIn);
 BOOL str_starts_with(PCTSTR swzFull, PCTSTR swzPrefix);
 UNICODE_STRING* string_to_unicode(PCTSTR swzIn);
+PTSTR unicode_to_string(PUNICODE_STRING pIn);
+VOID basedir(PTSTR swzPath);

@@ -64,3 +64,27 @@ UNICODE_STRING* string_to_unicode(PCTSTR swzIn)
 #endif
    return pUS;
 }
+
+PTSTR unicode_to_string(PUNICODE_STRING pIn)
+{
+   PTSTR swzOut = NULL;
+
+   if (pIn == NULL)
+      return safe_alloc(sizeof(TCHAR));
+
+   swzOut = safe_alloc(pIn->Length + sizeof(TCHAR));
+   memcpy(swzOut, pIn->Buffer, pIn->Length);
+   return swzOut;
+}
+
+VOID basedir(PTSTR swzPath)
+{
+   PTSTR swzStart = swzPath;
+   while (*swzPath != TEXT('\0'))
+      swzPath++;
+   while (swzPath != swzStart && *swzPath != TEXT('\\'))
+   {
+      *swzPath = TEXT('\0');
+      swzPath--;
+   }
+}

@@ -166,7 +166,7 @@ int _tmain(int argc, PCTSTR argv[])
          if (argn == argc - 1)
          {
             res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --kernobj requires an absolute NT path\n"));
+            _ftprintf(stderr, TEXT(" [!] Error: option --ntobj requires an absolute NT path\n"));
             print_usage();
             goto cleanup;
          }
