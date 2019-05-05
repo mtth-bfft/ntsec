@@ -10,12 +10,27 @@
 #define DIRECTORY_TRAVERSE 0x0002
 #define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
 #define STATUS_ACCESS_DENIED 0xC0000022
+#define STATUS_BUFFER_TOO_SMALL 0xC0000023
 #define STATUS_BUFFER_OVERFLOW 0x80000005
 #define STATUS_NO_MORE_FILES 0x80000006
 
 typedef enum _SYSTEM_INFORMATION_CLASS {
    SystemHandleInformation = 0x10,
 } SYSTEM_INFORMATION_CLASS;
+
+typedef enum _KEY_INFORMATION_CLASS {
+   KeyBasicInformation,
+   KeyNodeInformation,
+   KeyFullInformation,
+   KeyNameInformation,
+   KeyCachedInformation,
+   KeyFlagsInformation,
+   KeyVirtualizationInformation,
+   KeyHandleTagsInformation,
+   KeyTrustInformation,
+   KeyLayerInformation,
+   MaxKeyInfoClass
+} KEY_INFORMATION_CLASS;
 
 typedef enum _FILE_INFORMATION_CLASS {
    FileDirectoryInformation = 1,
@@ -60,6 +75,13 @@ typedef enum _FILE_INFORMATION_CLASS {
    FileOleInformation,
    FileMaximumInformation
 } FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;
+
+typedef struct _KEY_BASIC_INFORMATION {
+   LARGE_INTEGER LastWriteTime;
+   ULONG         TitleIndex;
+   ULONG         NameLength;
+   WCHAR         Name[1];
+} KEY_BASIC_INFORMATION, *PKEY_BASIC_INFORMATION;
 
 typedef struct _FILE_DIRECTORY_INFORMATION {
    ULONG         NextEntryOffset;
@@ -199,6 +221,14 @@ typedef NTSTATUS(WINAPI *PNtOpenKeyEx)(
    IN POBJECT_ATTRIBUTES   ObjectAttributes,
    IN ULONG                OpenOptions);
 
+typedef NTSTATUS(WINAPI *PNtEnumerateKey)(
+   IN HANDLE                KeyHandle,
+   IN ULONG                 Index,
+   IN KEY_INFORMATION_CLASS KeyInformationClass,
+   OUT PVOID                KeyInformation,
+   IN ULONG                 Length,
+   OUT PULONG               ResultLength);
+
 typedef NTSTATUS(WINAPI *PNtQuerySystemInformation)(
    IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
    OUT PVOID                   SystemInformation,
@@ -299,7 +329,7 @@ typedef enum {
 
 typedef int(*nt_object_open_t)(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 typedef int(*nt_object_enum_callback_t)(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData);
-typedef int(*nt_file_enum_callback_t)(PCTSTR swzNtPath, PVOID pData);
+typedef int(*nt_path_enum_callback_t)(PCTSTR swzNtPath, PVOID pData);
 
 extern PNtOpenDirectoryObject NtOpenDirectoryObject;
 extern PNtQueryDirectoryObject NtQueryDirectoryObject;
@@ -314,6 +344,7 @@ extern PNtOpenTimer NtOpenTimer;
 extern PNtOpenSession NtOpenSession;
 extern PNtOpenJobObject NtOpenJobObject;
 extern PNtOpenKeyEx NtOpenKeyEx;
+extern PNtEnumerateKey NtEnumerateKey;
 extern PNtAlpcConnectPort NtAlpcConnectPort;
 extern PNtQuerySystemInformation NtQuerySystemInformation;
 
@@ -336,6 +367,7 @@ int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired
 int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_unsupported_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int foreach_nt_object(PCTSTR swzNTPath, nt_object_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
-int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
+int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
+int foreach_nt_key(HANDLE hKey, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
 int enumerate_nt_objects_with(DWORD dwDesiredAccess);
 int get_handle_granted_rights(HANDLE hHandle, PDWORD pdwGrantedRights);

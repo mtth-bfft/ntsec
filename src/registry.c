@@ -2,6 +2,7 @@
 #include <tchar.h>
 #include <stdio.h>
 #include "registry.h"
+#include "nt.h"
 #include "utils.h"
 
 int open_regkey_by_name(PCTSTR swzRegKey, REGSAM ulDesiredAccess, PHKEY phOut)
@@ -51,6 +52,7 @@ int open_regkey_by_name(PCTSTR swzRegKey, REGSAM ulDesiredAccess, PHKEY phOut)
    }
    else
    {
+      //TODO: fallback to raw NT path within \REGISTRY
       res = ERROR_INVALID_PARAMETER;
       _ftprintf(stderr, TEXT(" [!] Cannot open registry key with unknown hive name '%s'\n"), swzRegKey);
       goto cleanup;
@@ -65,4 +67,26 @@ int open_regkey_by_name(PCTSTR swzRegKey, REGSAM ulDesiredAccess, PHKEY phOut)
 
 cleanup:
    return res;
+}
+
+static int nt_key_callback(PCTSTR swzKeyNTPath, PVOID pData)
+{
+   int res = 0;
+   DWORD dwDesiredAccess = *(PDWORD)pData;
+   HANDLE hKey = INVALID_HANDLE_VALUE;
+
+   res = open_nt_key_object(swzKeyNTPath, dwDesiredAccess, &hKey);
+   if (res == 0)
+   {
+      _tprintf(TEXT("%s\n"), swzKeyNTPath);
+      if (!CloseHandle(hKey))
+         _ftprintf(stderr, TEXT(" [!] Warning: could not close handle to registry key %s during enumeration, code %u"), swzKeyNTPath, GetLastError());
+   }
+
+   return 0;
+}
+
+int enumerate_keys_with(DWORD dwDesiredAccess)
+{
+   return foreach_nt_key(TEXT("\\REGISTRY"), nt_key_callback, &dwDesiredAccess, TRUE);
 }

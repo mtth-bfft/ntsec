@@ -60,6 +60,7 @@ PNtOpenTimer NtOpenTimer = NULL;
 PNtOpenSession NtOpenSession = NULL;
 PNtOpenJobObject NtOpenJobObject = NULL;
 PNtOpenKeyEx NtOpenKeyEx = NULL;
+PNtEnumerateKey NtEnumerateKey = NULL;
 PNtAlpcConnectPort NtAlpcConnectPort = NULL;
 PNtQuerySystemInformation NtQuerySystemInformation = NULL;
 
@@ -137,6 +138,9 @@ int resolve_imports()
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtOpenKeyEx", &NtOpenKeyEx);
+   if (res != 0)
+      goto cleanup;
+   res = do_import_function(hNTDLL, "NtEnumerateKey", &NtEnumerateKey);
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtAlpcConnectPort", &NtAlpcConnectPort);
@@ -377,7 +381,7 @@ cleanup:
    return res;
 }
 
-int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
+int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
 {
    int res = 0;
    HANDLE hDir = INVALID_HANDLE_VALUE;
@@ -385,8 +389,8 @@ int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callb
    PFILE_DIRECTORY_INFORMATION pFile = safe_alloc(ulFileBufSize);
    IO_STATUS_BLOCK ioStatus = { 0 };
    NTSTATUS status = STATUS_SUCCESS;
-   SIZE_T dwChildNTPathLen = _tcslen(swzDirectoryFileNTPath) + 1000 + 1;
-   PTSTR swzChildNTPath = safe_alloc(dwChildNTPathLen * sizeof(TCHAR));
+   SIZE_T dwChildNTPathLen = 0;
+   PTSTR swzChildNTPath = NULL;
    PTSTR swzChildName = NULL;
 
    if (swzDirectoryFileNTPath == NULL || pCallback == NULL)
@@ -395,6 +399,8 @@ int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callb
       goto cleanup;
    }
 
+   dwChildNTPathLen = _tcslen(swzDirectoryFileNTPath) + 1000 + 1;
+   swzChildNTPath = safe_alloc(dwChildNTPathLen * sizeof(TCHAR));
    _tcscpy_s(swzChildNTPath, dwChildNTPathLen, swzDirectoryFileNTPath);
    if (swzChildNTPath[_tcslen(swzChildNTPath) - 1] != TEXT('\\'))
       _tcscat_s(swzChildNTPath, dwChildNTPathLen, TEXT("\\"));
@@ -439,10 +445,11 @@ int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callb
       {
          continue;
       }
+      //FIXME: support for !UNICODE
       _tcsncpy_s(swzChildName, 1000, pFile->FileName, pFile->FileNameLength / sizeof(WCHAR));
 
       if (bRecurse && (pFile->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
-         foreach_nt_directory_files(swzChildNTPath, pCallback, pData, bRecurse);
+         foreach_nt_file(swzChildNTPath, pCallback, pData, bRecurse);
 
       res = pCallback(swzChildNTPath, pData);
       if (res != 0)
@@ -456,6 +463,77 @@ cleanup:
    if (pFile != NULL)
       safe_free(pFile);
    return 0;
+}
+
+int foreach_nt_key(PCTSTR swzKeyNTPath, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
+{
+   int res = 0;
+   HANDLE hKey = INVALID_HANDLE_VALUE;
+   NTSTATUS status = 0;
+   ULONG ulIndex = 0;
+   ULONG ulBufLen = 0x1000;
+   ULONG ulBufRequired = 0;
+   PKEY_BASIC_INFORMATION pKeyItem = safe_alloc(ulBufLen);
+   SIZE_T dwChildNTPathLen = 0;
+   PTSTR swzChildNTPath = NULL;
+   PTSTR swzChildName = NULL;
+
+   if (swzKeyNTPath == NULL || pCallback == NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   dwChildNTPathLen = _tcslen(swzKeyNTPath) + 1000 + 1;
+   swzChildNTPath = safe_alloc(dwChildNTPathLen * sizeof(TCHAR));
+   _tcscpy_s(swzChildNTPath, dwChildNTPathLen, swzKeyNTPath);
+   if (swzChildNTPath[_tcslen(swzChildNTPath) - 1] != TEXT('\\'))
+      _tcscat_s(swzChildNTPath, dwChildNTPathLen, TEXT("\\"));
+   swzChildName = swzChildNTPath + _tcslen(swzChildNTPath);
+
+   res = open_nt_key_object(swzKeyNTPath, KEY_ENUMERATE_SUB_KEYS, &hKey);
+   if (res != 0)
+      goto cleanup;
+
+   do
+   {
+      status = NtEnumerateKey(hKey, ulIndex, KeyBasicInformation, pKeyItem, ulBufLen, &ulBufRequired);
+      if (status == STATUS_BUFFER_OVERFLOW || status == STATUS_BUFFER_TOO_SMALL)
+      {
+         ulBufLen = ulBufRequired;
+         pKeyItem = safe_realloc(pKeyItem, ulBufLen);
+         continue;
+      }
+      else if (!NT_SUCCESS(status))
+      {
+         break;
+      }
+
+      //FIXME: support for !UNICODE
+      _tcsncpy_s(swzChildName, 1000, pKeyItem->Name, pKeyItem->NameLength / sizeof(WCHAR));
+
+      if (bRecurse)
+         foreach_nt_key(swzChildNTPath, pCallback, pData, bRecurse);
+
+      res = pCallback(swzChildNTPath, pData);
+      if (res != 0)
+         goto cleanup;
+
+      ulIndex++;
+   }
+   while (NT_SUCCESS(status));
+
+   if (status != STATUS_NO_MORE_ENTRIES)
+      res = status;
+
+cleanup:
+   if (hKey != INVALID_HANDLE_VALUE)
+      CloseHandle(hKey);
+   if (swzChildNTPath != NULL)
+      safe_free(swzChildNTPath);
+   if (pKeyItem != NULL)
+      safe_free(pKeyItem);
+   return res;
 }
 
 int open_nt_symbolic_link_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)

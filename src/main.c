@@ -59,9 +59,10 @@ static void print_usage()
    _ftprintf(stderr, TEXT("                                 (requires SeAssignPrimaryTokenPrivilege)\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Enumerate objects with a given criteria (doesn't select any of them) (mostly useful while impersonating a token):\n"));
+   _ftprintf(stderr, TEXT("   --ntobj-with <access_right>                 shows all NT objects on which we have the given access right\n"));
    _ftprintf(stderr, TEXT("   --files-with <access_right>                 shows all files on which we have the given access right\n"));
-   _ftprintf(stderr, TEXT("   --regkey-with <access_right>                shows all registry keys on which we have the given access right\n"));
-   _ftprintf(stderr, TEXT("   --proc-with <access_right|sid|privilege>    shows all processes on which we have the given access right, or who\n"));
+   _ftprintf(stderr, TEXT("   --keys-with  <access_right>                 shows all registry keys on which we have the given access right\n"));
+   _ftprintf(stderr, TEXT("   --proc-with  <access_right|sid|privilege>   shows all processes on which we have the given access right, or who\n"));
    _ftprintf(stderr, TEXT("                                               hold a primary token containing the given SID or privilege name\n"));
    _ftprintf(stderr, TEXT("   --thread-with <access_right|sid|privilege>  shows all threads on which we have the given access right, or who\n"));
    _ftprintf(stderr, TEXT("                                               hold an impersonation token containing the given SID or privilege name\n"));
@@ -394,17 +395,39 @@ int _tmain(int argc, PCTSTR argv[])
          safe_free(pAttrList);
          _tprintf(TEXT(" [.] Token stolen by child process %u executing %s\n"), procInfo.dwProcessId, swzTargetCommand);
       }
+      else if (_tcsicmp(TEXT("--ntobj-with"), arg) == 0)
+      {
+         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
+         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+         if (argn == argc)
+         {
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = enumerate_nt_objects_with(dwDesiredAccess);
+         if (res != 0)
+            goto cleanup;
+      }
       else if (_tcsicmp(TEXT("--files-with"), arg) == 0)
       {
-         if (argn == argc - 1)
+         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
+         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+         if (argn == argc)
          {
             res = -1;
             _ftprintf(stderr, TEXT(" [!] Error: option --files-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
             print_usage();
             goto cleanup;
          }
-         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
-         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
          res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
          if (res != 0)
          {
@@ -416,27 +439,27 @@ int _tmain(int argc, PCTSTR argv[])
          if (res != 0)
             goto cleanup;
       }
-      else if (_tcsicmp(TEXT("--ntobj-with"), arg) == 0)
+      else if (_tcsicmp(TEXT("--keys-with"), arg) == 0)
       {
-      if (argn == argc - 1)
-      {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-         print_usage();
-         goto cleanup;
-      }
-      PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
-      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
-      res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
-      if (res != 0)
-      {
-         _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-         print_usage();
-         goto cleanup;
-      }
-      res = enumerate_nt_objects_with(dwDesiredAccess);
-      if (res != 0)
-         goto cleanup;
+         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
+         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+         if (argn == argc)
+         {
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --keys-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: option --keys-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = enumerate_keys_with(dwDesiredAccess);
+         if (res != 0)
+            goto cleanup;
       }
       else
       {
