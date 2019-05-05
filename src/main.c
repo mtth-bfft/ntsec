@@ -314,15 +314,7 @@ int _tmain(int argc, PCTSTR argv[])
             _ftprintf(stderr, TEXT(" [!] Error: duplicating token for impersonation failed with code %u\n"), res);
             goto cleanup;
          }
-         res = set_privilege_caller(SE_IMPERSONATE_NAME, SE_PRIVILEGE_ENABLED);
-         if (res != 0)
-            goto cleanup;
-         if (!ImpersonateLoggedOnUser(hImpersToken))
-         {
-            res = GetLastError();
-            _ftprintf(stderr, TEXT(" [!] Error: impersonation failed with code %u\n"), res);
-            goto cleanup;
-         }
+         set_privilege_caller(SE_IMPERSONATE_NAME, SE_PRIVILEGE_ENABLED);
          _tprintf(TEXT(" [.] Impersonating token temporarily\n"));
       }
       else if (_tcsicmp(TEXT("--stop-impersonating"), arg) == 0)

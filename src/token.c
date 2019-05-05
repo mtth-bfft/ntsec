@@ -9,6 +9,62 @@
 
 #define MAX_PRIVILEGE_NAME_LEN 45
 
+static HANDLE hImpersonationToken = INVALID_HANDLE_VALUE;
+
+BOOL is_impersonation_set_up()
+{
+   return hImpersonationToken != INVALID_HANDLE_VALUE;
+}
+
+BOOL is_impersonating()
+{
+   BOOL bRes = FALSE;
+   HANDLE hToken = INVALID_HANDLE_VALUE;
+
+   if (OpenThreadToken(GetCurrentThread(), 0, FALSE, &hToken) || OpenThreadToken(GetCurrentThread(), 0, TRUE, &hToken))
+   {
+      bRes = TRUE;
+   }
+
+   if (hToken != INVALID_HANDLE_VALUE)
+      CloseHandle(hToken);
+   return bRes;
+}
+
+int set_impersonation_token(HANDLE hToken)
+{
+   if (hToken == INVALID_HANDLE_VALUE || hToken == NULL)
+      return ERROR_INVALID_PARAMETER;
+
+   RevertToSelf();
+   if (hImpersonationToken != INVALID_HANDLE_VALUE)
+      CloseHandle(hImpersonationToken);
+   hImpersonationToken = hToken;
+   return 0;
+}
+
+int start_impersonated_operation()
+{
+   int res = 0;
+   if (hImpersonationToken != INVALID_HANDLE_VALUE && !ImpersonateLoggedOnUser(hImpersonationToken))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: impersonation failed with code %u\n"), res);
+   }
+   return res;
+}
+
+int end_impersonated_operation()
+{
+   int res = 0;
+   if (hImpersonationToken != INVALID_HANDLE_VALUE && !RevertToSelf())
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: reverting impersonation failed with code %u\n"), res);
+   }
+   return res;
+}
+
 static int lookup_privilege(PCTSTR swzPrivName, PLUID pLUID)
 {
    int res = 0;
@@ -146,6 +202,13 @@ BOOL has_privilege_caller(PCTSTR swzPrivName)
    bRes = has_privilege(hToken, swzPrivName);
    CloseHandle(hToken);
    return bRes;
+}
+
+BOOL has_privilege_impersonated_target(PCTSTR swzPrivName)
+{
+   if (hImpersonationToken == INVALID_HANDLE_VALUE)
+      return has_privilege_caller(swzPrivName);
+   return has_privilege(hImpersonationToken, swzPrivName);
 }
 
 int get_token_info(HANDLE hToken, TOKEN_INFORMATION_CLASS infoClass, PVOID *ppResult, PDWORD pdwResultLen)

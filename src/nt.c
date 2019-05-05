@@ -384,6 +384,7 @@ cleanup:
 int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
 {
    int res = 0;
+   BOOL bImpersonating = FALSE;
    HANDLE hDir = INVALID_HANDLE_VALUE;
    ULONG ulFileBufSize = 0x1000;
    PFILE_DIRECTORY_INFORMATION pFile = safe_alloc(ulFileBufSize);
@@ -406,7 +407,29 @@ int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCall
       _tcscat_s(swzChildNTPath, dwChildNTPathLen, TEXT("\\"));
    swzChildName = swzChildNTPath + _tcslen(swzChildNTPath);
 
+   // Open directories all the way doing impersonation, but only
+   // if there's an impersonation token set up and it doesn't have
+   // the SeChangeNotifyPrivilege, which allows bypassing access checks
+   // on intermediary dirs. If it has that privilege, consider it can
+   // open the file anyway (e.g. by "guessing" its path) and do the
+   // enumeration part without impersonating.
+   if (!has_privilege_impersonated_target(SE_CHANGE_NOTIFY_NAME))
+   {
+      res = start_impersonated_operation();
+      if (res != 0)
+         goto cleanup;
+      bImpersonating = TRUE;
+   }
+
    res = open_nt_file_object(swzChildNTPath, FILE_LIST_DIRECTORY | SYNCHRONIZE, &hDir);
+
+   if (bImpersonating)
+   {
+      int res2 = end_impersonated_operation();
+      if (res == 0)
+         res = res2;
+   }
+
    if (res != 0)
       goto cleanup;
 
@@ -468,6 +491,7 @@ cleanup:
 int foreach_nt_key(PCTSTR swzKeyNTPath, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
 {
    int res = 0;
+   BOOL bImpersonating = FALSE;
    HANDLE hKey = INVALID_HANDLE_VALUE;
    NTSTATUS status = 0;
    ULONG ulIndex = 0;
@@ -491,7 +515,29 @@ int foreach_nt_key(PCTSTR swzKeyNTPath, nt_path_enum_callback_t pCallback, PVOID
       _tcscat_s(swzChildNTPath, dwChildNTPathLen, TEXT("\\"));
    swzChildName = swzChildNTPath + _tcslen(swzChildNTPath);
 
+   // Open registry keys all the way doing impersonation, but only
+   // if there's an impersonation token set up and it doesn't have
+   // the SeChangeNotifyPrivilege, which allows bypassing access checks
+   // on intermediary keys. If it has that privilege, consider it can
+   // open the key anyway (e.g. by "guessing" its path) and do the
+   // enumeration part without impersonating.
+   if (!has_privilege_impersonated_target(SE_CHANGE_NOTIFY_NAME))
+   {
+      res = start_impersonated_operation();
+      if (res != 0)
+         goto cleanup;
+      bImpersonating = TRUE;
+   }
+
    res = open_nt_key_object(swzKeyNTPath, KEY_ENUMERATE_SUB_KEYS, &hKey);
+
+   if (bImpersonating)
+   {
+      int res2 = end_impersonated_operation();
+      if (res == 0)
+         res = res2;
+   }
+
    if (res != 0)
       goto cleanup;
 

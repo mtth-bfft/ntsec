@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "registry.h"
 #include "nt.h"
+#include "token.h"
 #include "utils.h"
 
 int open_regkey_by_name(PCTSTR swzRegKey, REGSAM ulDesiredAccess, PHKEY phOut)
@@ -75,6 +76,10 @@ static int nt_key_callback(PCTSTR swzKeyNTPath, PVOID pData)
    DWORD dwDesiredAccess = *(PDWORD)pData;
    HANDLE hKey = INVALID_HANDLE_VALUE;
 
+   res = start_impersonated_operation();
+   if (res != 0)
+      goto cleanup;
+
    res = open_nt_key_object(swzKeyNTPath, dwDesiredAccess, &hKey);
    if (res == 0)
    {
@@ -83,6 +88,11 @@ static int nt_key_callback(PCTSTR swzKeyNTPath, PVOID pData)
          _ftprintf(stderr, TEXT(" [!] Warning: could not close handle to registry key %s during enumeration, code %u"), swzKeyNTPath, GetLastError());
    }
 
+   res = end_impersonated_operation();
+   if (res != 0)
+      goto cleanup;
+
+cleanup:
    return 0;
 }
 

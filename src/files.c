@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "files.h"
 #include "nt.h"
+#include "token.h"
 #include "utils.h"
 
 static int nt_file_callback(PCTSTR swzFileNTPath, PVOID pData)
@@ -10,6 +11,10 @@ static int nt_file_callback(PCTSTR swzFileNTPath, PVOID pData)
    int res = 0;
    DWORD dwDesiredAccess = *(PDWORD)pData;
    HANDLE hFile = INVALID_HANDLE_VALUE;
+
+   res = start_impersonated_operation();
+   if (res != 0)
+      goto cleanup;
 
    res = open_nt_file_object(swzFileNTPath, dwDesiredAccess, &hFile);
    if (res == 0)
@@ -19,6 +24,11 @@ static int nt_file_callback(PCTSTR swzFileNTPath, PVOID pData)
          _ftprintf(stderr, TEXT(" [!] Warning: could not close file handle to %s during enumeration, code %u"), swzFileNTPath, GetLastError());
    }
 
+   res = end_impersonated_operation();
+   if (res != 0)
+      goto cleanup;
+
+cleanup:
    return 0;
 }
 
