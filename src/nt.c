@@ -954,7 +954,7 @@ static int nt_object_callback(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID
    res = open_nt_object_with_type(swzNTPath, swzType, dwDesiredAccess, &hObj);
    if (res == 0)
    {
-      _tprintf(TEXT(" %s (%s)\n"), swzNTPath, swzType);
+      _tprintf(TEXT("%20s | %s\n"), swzType, swzNTPath);
       CloseHandle(hObj);
    }
    else if (res != STATUS_ACCESS_DENIED && res != ERROR_NOT_SUPPORTED && res != 0x80070005) // TODO: migrate nt_object_open_t to return a HRESULT
