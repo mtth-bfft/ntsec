@@ -33,19 +33,29 @@ BOOL is_impersonating()
 
 int set_impersonation_token(HANDLE hToken)
 {
+   int res = 0;
+
    if (hToken == INVALID_HANDLE_VALUE || hToken == NULL)
       return ERROR_INVALID_PARAMETER;
 
-   RevertToSelf();
    if (hImpersonationToken != INVALID_HANDLE_VALUE)
       CloseHandle(hImpersonationToken);
-   hImpersonationToken = hToken;
-   return 0;
+
+   if (!DuplicateToken(hToken, SecurityImpersonation, &hImpersonationToken))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: duplicating token for impersonation failed with code %u\n"), res);
+      goto cleanup;
+   }
+
+cleanup:
+   return res;
 }
 
 int start_impersonated_operation()
 {
    int res = 0;
+   set_privilege_caller(SE_IMPERSONATE_NAME, SE_PRIVILEGE_ENABLED);
    if (hImpersonationToken != INVALID_HANDLE_VALUE && !ImpersonateLoggedOnUser(hImpersonationToken))
    {
       res = GetLastError();

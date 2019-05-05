@@ -304,17 +304,12 @@ int _tmain(int argc, PCTSTR argv[])
       else if (_tcsicmp(TEXT("--impersonate"), arg) == 0)
       {
          HANDLE hToken = INVALID_HANDLE_VALUE;
-         HANDLE hImpersToken = INVALID_HANDLE_VALUE;
          res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &hToken);
          if (res != 0)
             goto cleanup;
-         if (!DuplicateToken(hToken, SecurityImpersonation, &hImpersToken))
-         {
-            res = GetLastError();
-            _ftprintf(stderr, TEXT(" [!] Error: duplicating token for impersonation failed with code %u\n"), res);
+         res = set_impersonation_token(hToken);
+         if (res != 0)
             goto cleanup;
-         }
-         set_privilege_caller(SE_IMPERSONATE_NAME, SE_PRIVILEGE_ENABLED);
          _tprintf(TEXT(" [.] Impersonating token temporarily\n"));
       }
       else if (_tcsicmp(TEXT("--stop-impersonating"), arg) == 0)
