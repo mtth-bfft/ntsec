@@ -149,37 +149,42 @@ typedef NTSTATUS(WINAPI *PNtQueryDirectoryFile)(
    BOOLEAN                RestartScan);
 
 typedef NTSTATUS(WINAPI *PNtOpenSymbolicLinkObject)(
-   _Out_ PHANDLE            LinkHandle,
+   _Out_ PHANDLE            Handle,
    _In_  ACCESS_MASK        DesiredAccess,
    _In_  POBJECT_ATTRIBUTES ObjectAttributes);
 
 typedef NTSTATUS(WINAPI *PNtOpenMutant)(
-   OUT PHANDLE             MutantHandle,
+   OUT PHANDLE             Handle,
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
 typedef NTSTATUS(WINAPI *PNtOpenEvent)(
-   OUT PHANDLE             MutantHandle,
+   OUT PHANDLE             Handle,
+   IN ACCESS_MASK          DesiredAccess,
+   IN POBJECT_ATTRIBUTES   ObjectAttributes);
+
+typedef NTSTATUS(WINAPI *PNtOpenKeyedEvent)(
+   OUT PHANDLE             Handle,
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
 typedef NTSTATUS(WINAPI *PNtOpenSection)(
-   OUT PHANDLE             MutantHandle,
+   OUT PHANDLE             Handle,
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
 typedef NTSTATUS(WINAPI *PNtOpenSemaphore)(
-   OUT PHANDLE             MutantHandle,
+   OUT PHANDLE             Handle,
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
 typedef NTSTATUS(WINAPI *PNtOpenTimer)(
-   OUT PHANDLE             MutantHandle,
+   OUT PHANDLE             Handle,
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
 typedef NTSTATUS(WINAPI *PNtOpenSession)(
-   OUT PHANDLE             MutantHandle,
+   OUT PHANDLE             Handle,
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
@@ -307,6 +312,7 @@ int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 int open_nt_symbolic_link_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_mutant_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_event_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
+int open_nt_keyedevent_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_section_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_semaphore_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_timer_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);

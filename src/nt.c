@@ -19,6 +19,7 @@ static const nt_object_open_t pNTObjectTypes[][2] = {
    { (nt_object_open_t) TEXT("SymbolicLink"),         &open_nt_symbolic_link_object },
    { (nt_object_open_t) TEXT("Mutant"),               &open_nt_mutant_object },
    { (nt_object_open_t) TEXT("Event"),                &open_nt_event_object },
+   { (nt_object_open_t) TEXT("KeyedEvent"),           &open_nt_keyedevent_object },
    { (nt_object_open_t) TEXT("Section"),              &open_nt_section_object },
    { (nt_object_open_t) TEXT("Semaphore"),            &open_nt_semaphore_object },
    { (nt_object_open_t) TEXT("Timer"),                &open_nt_timer_object },
@@ -50,6 +51,7 @@ PNtQueryDirectoryFile NtQueryDirectoryFile = NULL;
 PNtOpenSymbolicLinkObject NtOpenSymbolicLinkObject = NULL;
 PNtOpenMutant NtOpenMutant = NULL;
 PNtOpenEvent NtOpenEvent = NULL;
+PNtOpenKeyedEvent NtOpenKeyedEvent = NULL;
 PNtOpenSection NtOpenSection = NULL;
 PNtOpenSemaphore NtOpenSemaphore = NULL;
 PNtOpenTimer NtOpenTimer = NULL;
@@ -61,6 +63,12 @@ static int do_import_function(HMODULE hLib, PCSTR swzFunctionName, PVOID pFuncti
 {
    int res = 0;
    PVOID pRes = (PVOID)GetProcAddress(hLib, swzFunctionName);
+
+   if (hLib == NULL || hLib == INVALID_HANDLE_VALUE || swzFunctionName == NULL || pFunctionPtr == NULL || *(PVOID*)pFunctionPtr != NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
    if (pRes == NULL)
    {
@@ -104,6 +112,9 @@ int resolve_imports()
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtOpenEvent", &NtOpenEvent);
+   if (res != 0)
+      goto cleanup;
+   res = do_import_function(hNTDLL, "NtOpenKeyedEvent", &NtOpenKeyedEvent);
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtOpenSection", &NtOpenSection);
@@ -506,6 +517,33 @@ int open_nt_event_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
    status = NtOpenEvent(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_keyedevent_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   NTSTATUS status = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenKeyedEvent(phOut, dwRightsRequired, &objAttr);
    if (!NT_SUCCESS(status))
    {
       res = status;
