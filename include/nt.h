@@ -292,7 +292,7 @@ extern PNtQueryDirectoryFile NtQueryDirectoryFile;
 extern PNtOpenSymbolicLinkObject NtOpenSymbolicLinkObject;
 extern PNtOpenMutant NtOpenMutant;
 extern PNtOpenEvent NtOpenEvent;
-extern PNtOpenSection NtOpenEvent;
+extern PNtOpenSection NtOpenSection;
 extern PNtOpenSemaphore NtOpenSemaphore;
 extern PNtOpenTimer NtOpenTimer;
 extern PNtOpenSession NtOpenSession;
