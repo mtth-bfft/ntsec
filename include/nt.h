@@ -8,20 +8,13 @@
 #define FILE_OPEN_IF 0x00000003
 #define DIRECTORY_QUERY 0x0001
 #define DIRECTORY_TRAVERSE 0x0002
+#define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
 #define STATUS_ACCESS_DENIED 0xC0000022
 #define STATUS_BUFFER_OVERFLOW 0x80000005
 #define STATUS_NO_MORE_FILES 0x80000006
 
 typedef enum _SYSTEM_INFORMATION_CLASS {
-   SystemBasicInformation = 0,
-   SystemPerformanceInformation = 2,
-   SystemTimeOfDayInformation = 3,
-   SystemProcessInformation = 5,
-   SystemProcessorPerformanceInformation = 8,
-   SystemInterruptInformation = 23,
-   SystemExceptionInformation = 33,
-   SystemRegistryQuotaInformation = 37,
-   SystemLookasideInformation = 45
+   SystemHandleInformation = 0x10,
 } SYSTEM_INFORMATION_CLASS;
 
 typedef enum _FILE_INFORMATION_CLASS {
@@ -103,6 +96,22 @@ typedef struct _IO_STATUS_BLOCK {
    } _result;
    ULONG_PTR Information;
 } IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
+
+typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO
+{
+   ULONG ProcessId;
+   BYTE ObjectTypeNumber;
+   BYTE Flags;
+   USHORT Handle;
+   PVOID Object;
+   ACCESS_MASK GrantedAccess;
+} SYSTEM_HANDLE_TABLE_ENTRY_INFO, *PSYSTEM_HANDLE_TABLE_ENTRY_INFO;
+
+typedef struct _SYSTEM_HANDLE_INFORMATION
+{
+   ULONG HandleCount;
+   SYSTEM_HANDLE_TABLE_ENTRY_INFO Handles[ANYSIZE_ARRAY];
+} SYSTEM_HANDLE_INFORMATION, *PSYSTEM_HANDLE_INFORMATION;
 
 typedef NTSTATUS(WINAPI *PNtOpenDirectoryObject)(
    _Out_ PHANDLE            DirectoryHandle,
@@ -308,3 +317,4 @@ int open_nt_unsupported_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE 
 int foreach_nt_object(PCTSTR swzNTPath, nt_object_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
 int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
 int enumerate_nt_objects_with(DWORD dwDesiredAccess);
+int get_handle_granted_rights(HANDLE hHandle, PDWORD pdwGrantedRights);

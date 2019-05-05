@@ -440,120 +440,264 @@ cleanup:
 int open_nt_symbolic_link_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
-   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenSymbolicLinkObject(phOut, dwRightsRequired, &objAttr);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenSymbolicLinkObject(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
 int open_nt_mutant_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
-   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenMutant(phOut, dwRightsRequired, &objAttr);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenMutant(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
 int open_nt_event_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
-   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenEvent(phOut, dwRightsRequired, &objAttr);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenEvent(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
 int open_nt_section_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
-   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenSection(phOut, dwRightsRequired, &objAttr);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenSection(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
 int open_nt_semaphore_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
-   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenSemaphore(phOut, dwRightsRequired, &objAttr);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenSemaphore(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
 int open_nt_timer_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
-   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenTimer(phOut, dwRightsRequired, &objAttr);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenTimer(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
 int open_nt_session_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
-   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenSession(phOut, dwRightsRequired, &objAttr);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenSession(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
 int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
-   UNREFERENCED_PARAMETER(dwRightsRequired);
    int res = 0;
+   HRESULT hRes = 0;
    PWSTR swzPortName = string_to_wide(swzNTPath);
+   DWORD dwGrantedRights = 0;
 
-   res = FilterConnectCommunicationPort(swzPortName, 0, NULL, 0, NULL, phOut);
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
-   safe_free(swzPortName);
+   hRes = FilterConnectCommunicationPort(swzPortName, 0, NULL, 0, NULL, phOut);
+   if (hRes != S_OK)
+   {
+      res = hRes;
+      goto cleanup;
+   }
+
+   res = get_handle_granted_rights(*phOut, &dwGrantedRights);
+   if (res != 0)
+      goto cleanup;
+
+   if ((dwGrantedRights & dwRightsRequired) != dwRightsRequired)
+      res = ERROR_ACCESS_DENIED;
+
+cleanup:
+   if (res != 0 && *phOut != NULL && *phOut != INVALID_HANDLE_VALUE)
+      CloseHandle(*phOut);
+   if (swzPortName != NULL)
+      safe_free(swzPortName);
    return res;
 }
 
 int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
-   UNREFERENCED_PARAMETER(dwRightsRequired);
    int res = 0;
+   NTSTATUS status = 0;
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
    OBJECT_ATTRIBUTES objAttr = { 0 };
    LARGE_INTEGER liTimeout = { 0 };
    ULONG ulBufferLen = 0;
+   DWORD dwGrantedRights = 0;
+
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
 
    InitializeObjectAttributes(&objAttr, NULL, 0, NULL, NULL);
    liTimeout.QuadPart = 1;
-   res = NtAlpcConnectPort(phOut, pUSObjName, &objAttr, NULL, 0, NULL, NULL, &ulBufferLen, NULL, NULL, &liTimeout);
+   status = NtAlpcConnectPort(phOut, pUSObjName, &objAttr, NULL, 0, NULL, NULL, &ulBufferLen, NULL, NULL, &liTimeout);
+   if (!NT_SUCCESS(res))
+   {
+      res = status;
+      goto cleanup;
+   }
 
-   safe_free(pUSObjName);
+   res = get_handle_granted_rights(*phOut, &dwGrantedRights);
+   if (res != 0)
+      goto cleanup;
+
+   if ((dwGrantedRights & dwRightsRequired) != dwRightsRequired)
+      res = ERROR_ACCESS_DENIED;
+
+cleanup:
+   if (res != 0 && *phOut != NULL && *phOut != INVALID_HANDLE_VALUE)
+      CloseHandle(*phOut);
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
    return res;
 }
 
@@ -574,16 +718,58 @@ int open_nt_object_with_type(PCTSTR swzNTPath, PCTSTR swzType, DWORD dwRightsReq
          return pNTObjectTypes[i][1](swzNTPath, dwRightsRequired, phOut);
       }
    }
-   _ftprintf(stderr, TEXT(" [!] Warning: cannot open unsupported NT object type %s (at %s)\n"), swzType, swzNTPath);
+   _ftprintf(stderr, TEXT(" [!] Warning: skipping unsupported NT object type %s (cannot open %s)\n"), swzType, swzNTPath);
    return ERROR_NOT_SUPPORTED;
 }
 
-/*
 int get_handle_granted_rights(HANDLE hHandle, PDWORD pdwGrantedRights)
 {
+   int res = 0;
+   NTSTATUS status = 0;
+   ULONG ulBufRequired = 0;
+   ULONG ulBufLen = 0x1000;
+   PSYSTEM_HANDLE_INFORMATION pHandles = safe_alloc(ulBufLen);
+   BOOL bFound = FALSE;
 
+   if (pdwGrantedRights == NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   do
+   {
+      ulBufLen *= 2;
+      pHandles = safe_realloc(pHandles, ulBufLen);
+      status = NtQuerySystemInformation(SystemHandleInformation, pHandles, ulBufLen, &ulBufRequired);
+      // NtQuerySystemInformation(SystemHandleInformation) doesn't fill ulBufRequired: try again with a higher guess...
+   }
+   while (status == STATUS_INFO_LENGTH_MISMATCH);
+
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+   for (ULONG i = 0; i < pHandles->HandleCount; i++)
+   {
+      PSYSTEM_HANDLE_TABLE_ENTRY_INFO pHandle = &(pHandles->Handles[i]);
+      if (pHandle->ProcessId == GetCurrentProcessId() && (ULONG)pHandle->Handle == (ULONG)hHandle)
+      {
+         bFound = TRUE;
+         *pdwGrantedRights = pHandle->GrantedAccess;
+         break;
+      }
+   }
+
+   if (!bFound)
+      res = ERROR_NOT_FOUND;
+
+cleanup:
+   safe_free(pHandles);
+   return res;
 }
-*/
 
 static int callback_find_nt_object_type(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData)
 {
