@@ -9,7 +9,7 @@ static int nt_file_callback(PCTSTR swzFileNTPath, PVOID pData)
 {
    DWORD dwDesiredAccess = *(PDWORD)pData;
    (void)(dwDesiredAccess);
-   _tprintf(TEXT("Found file %s\n"), swzFileNTPath);
+   _tprintf(TEXT("%s\n"), swzFileNTPath);
    return 0;
 }
 
@@ -23,7 +23,8 @@ static int nt_device_callback(PCTSTR swzDeviceNTPath, PUNICODE_STRING pusObjType
 int enumerate_files_with(DWORD dwDesiredAccess)
 {
    int res = 0;
-   // First, enumerate accessible disks (some might not have a DOS letter and only be accessible through native calls)
+   // Enumerate accessible disks (some might not have a DOS letter and only be accessible through native calls)
+   // and then foreach disk, enumerate files
    res = foreach_nt_object(TEXT("\\"), nt_device_callback, (PVOID)&dwDesiredAccess, TRUE);
    return res;
 }

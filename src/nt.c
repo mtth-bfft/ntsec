@@ -26,6 +26,7 @@ static const nt_object_open_t pNTObjectTypes[][2] = {
    { (nt_object_open_t) TEXT("Device"),               &open_nt_file_object },
    { (nt_object_open_t) TEXT("Session"),              &open_nt_session_object },
    { (nt_object_open_t) TEXT("Job"),                  &open_nt_job_object },
+   { (nt_object_open_t) TEXT("Key"),                  &open_nt_key_object },
    { (nt_object_open_t) TEXT("FilterConnectionPort"), &open_nt_filterconnectionport_object },
    { (nt_object_open_t) TEXT("ALPC Port"),            &open_nt_alpcconnectionport_object },
    // No way to open these from userland:
@@ -58,6 +59,7 @@ PNtOpenSemaphore NtOpenSemaphore = NULL;
 PNtOpenTimer NtOpenTimer = NULL;
 PNtOpenSession NtOpenSession = NULL;
 PNtOpenJobObject NtOpenJobObject = NULL;
+PNtOpenKeyEx NtOpenKeyEx = NULL;
 PNtAlpcConnectPort NtAlpcConnectPort = NULL;
 PNtQuerySystemInformation NtQuerySystemInformation = NULL;
 
@@ -132,6 +134,9 @@ int resolve_imports()
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtOpenJobObject", &NtOpenJobObject);
+   if (res != 0)
+      goto cleanup;
+   res = do_import_function(hNTDLL, "NtOpenKeyEx", &NtOpenKeyEx);
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtAlpcConnectPort", &NtAlpcConnectPort);
@@ -684,6 +689,39 @@ int open_nt_job_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
    status = NtOpenJobObject(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_key_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   NTSTATUS status = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+   ULONG ulOpenFlags = REG_OPTION_OPEN_LINK; // don't open symbolic link targets, but the links themselves
+
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   if (has_privilege_caller(SE_BACKUP_NAME) || has_privilege_caller(SE_RESTORE_NAME))
+   {
+      ulOpenFlags |= REG_OPTION_BACKUP_RESTORE;
+   }
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenKeyEx(phOut, dwRightsRequired, &objAttr, ulOpenFlags);
    if (!NT_SUCCESS(status))
    {
       res = status;
