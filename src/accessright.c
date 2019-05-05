@@ -68,6 +68,17 @@ PCTSTR pAccessRights[][5] = {
    { (PCTSTR) FILE_GENERIC_READ,           TEXT("FILE_GENERIC_READ"),       NULL,        NULL,         NULL },
    { (PCTSTR) FILE_GENERIC_WRITE,          TEXT("FILE_GENERIC_WRITE"),      NULL,        NULL,         NULL },
    { (PCTSTR) FILE_GENERIC_EXECUTE,        TEXT("FILE_GENERIC_EXECUTE"),    NULL,        NULL,         NULL },
+   // Registry key specific rights
+   { (PCTSTR) KEY_QUERY_VALUE,             TEXT("KEY_QUERY_VALUE"),         NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_SET_VALUE,               TEXT("KEY_SET_VALUE"),           NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_CREATE_SUB_KEY,          TEXT("KEY_CREATE_SUB_KEY"),      NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_ENUMERATE_SUB_KEYS,      TEXT("KEY_ENUMERATE_SUB_KEYS"),  NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_NOTIFY,                  TEXT("KEY_NOTIFY"),              NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_CREATE_LINK,             TEXT("KEY_CREATE_LINK"),         NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_READ,                    TEXT("KEY_READ"),                NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_WRITE,                   TEXT("KEY_WRITE"),               NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_EXECUTE,                 TEXT("KEY_EXECUTE"),             NULL,        NULL,         NULL },
+   { (PCTSTR) KEY_ALL_ACCESS,              TEXT("KEY_ALL_ACCESS"),          NULL,        NULL,         NULL },
 };
 
 static int parse_single_access_right(PTSTR swzDesiredAccess, PDWORD pdwDesiredAccess)
