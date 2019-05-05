@@ -171,7 +171,8 @@ BOOL has_privilege(HANDLE hToken, PCTSTR swzPrivName)
    if (res != 0)
       return FALSE;
    
-   if (!get_token_info(hToken, TokenPrivileges, &pPrivs, NULL))
+   res = get_token_info(hToken, TokenPrivileges, &pPrivs, NULL);
+   if (res != 0)
       return FALSE;
 
    for (DWORD i = 0; i < pPrivs->PrivilegeCount; i++)
