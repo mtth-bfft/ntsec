@@ -22,9 +22,7 @@ static int nt_device_callback(PCTSTR swzDeviceNTPath, PUNICODE_STRING pusObjType
 
 int enumerate_files_with(DWORD dwDesiredAccess)
 {
-   int res = 0;
    // Enumerate accessible disks (some might not have a DOS letter and only be accessible through native calls)
    // and then foreach disk, enumerate files
-   res = foreach_nt_object(TEXT("\\"), nt_device_callback, (PVOID)&dwDesiredAccess, TRUE);
-   return res;
+   return foreach_nt_object(TEXT("\\"), nt_device_callback, (PVOID)&dwDesiredAccess, TRUE);
 }

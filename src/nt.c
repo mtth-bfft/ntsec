@@ -754,12 +754,15 @@ int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired
       goto cleanup;
    }
 
-   res = get_handle_granted_rights(*phOut, &dwGrantedRights);
-   if (res != 0)
-      goto cleanup;
+   if ((dwRightsRequired & MAXIMUM_ALLOWED) == 0)
+   {
+      res = get_handle_granted_rights(*phOut, &dwGrantedRights);
+      if (res != 0)
+         goto cleanup;
 
-   if ((dwGrantedRights & dwRightsRequired) != dwRightsRequired)
-      res = ERROR_ACCESS_DENIED;
+      if ((dwGrantedRights & dwRightsRequired) != dwRightsRequired)
+         res = ERROR_ACCESS_DENIED;
+   }
 
 cleanup:
    if (res != 0 && *phOut != NULL && *phOut != INVALID_HANDLE_VALUE)
@@ -794,12 +797,15 @@ int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, 
       goto cleanup;
    }
 
-   res = get_handle_granted_rights(*phOut, &dwGrantedRights);
-   if (res != 0)
-      goto cleanup;
+   if ((dwRightsRequired & MAXIMUM_ALLOWED) == 0)
+   {
+      res = get_handle_granted_rights(*phOut, &dwGrantedRights);
+      if (res != 0)
+         goto cleanup;
 
-   if ((dwGrantedRights & dwRightsRequired) != dwRightsRequired)
-      res = ERROR_ACCESS_DENIED;
+      if ((dwGrantedRights & dwRightsRequired) != dwRightsRequired)
+         res = ERROR_ACCESS_DENIED;
+   }
 
 cleanup:
    if (res != 0 && *phOut != NULL && *phOut != INVALID_HANDLE_VALUE)

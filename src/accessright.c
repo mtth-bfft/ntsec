@@ -29,6 +29,7 @@ enum
 
 PCTSTR pAccessRights[][5] = {
    // Generic access rights
+   { (PCTSTR) MAXIMUM_ALLOWED,             TEXT("MAXIMUM_ALLOWED"),         NULL,        NULL,         NULL },
    { (PCTSTR) GENERIC_READ,                TEXT("GENERIC_READ"),            TEXT("GR"),  NULL,         NULL },
    { (PCTSTR) GENERIC_WRITE,               TEXT("GENERIC_WRITE"),           TEXT("GW"),  NULL,         NULL },
    { (PCTSTR) GENERIC_EXECUTE,             TEXT("GENERIC_EXECUTE"),         TEXT("GE"),  NULL,         NULL },
