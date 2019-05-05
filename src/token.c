@@ -126,7 +126,7 @@ BOOL has_privilege_caller(PCTSTR swzPrivName)
    HANDLE hToken = INVALID_HANDLE_VALUE;
    BOOL bRes = FALSE;
 
-   if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE, &hToken))
+   if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE, &hToken) && !OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hToken))
    {
       if (GetLastError() == ERROR_NO_TOKEN)
       {
