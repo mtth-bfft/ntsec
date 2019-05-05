@@ -12,6 +12,18 @@
 #define STATUS_BUFFER_OVERFLOW 0x80000005
 #define STATUS_NO_MORE_FILES 0x80000006
 
+typedef enum _SYSTEM_INFORMATION_CLASS {
+   SystemBasicInformation = 0,
+   SystemPerformanceInformation = 2,
+   SystemTimeOfDayInformation = 3,
+   SystemProcessInformation = 5,
+   SystemProcessorPerformanceInformation = 8,
+   SystemInterruptInformation = 23,
+   SystemExceptionInformation = 33,
+   SystemRegistryQuotaInformation = 37,
+   SystemLookasideInformation = 45
+} SYSTEM_INFORMATION_CLASS;
+
 typedef enum _FILE_INFORMATION_CLASS {
    FileDirectoryInformation = 1,
    FileFullDirectoryInformation,
@@ -162,8 +174,20 @@ typedef NTSTATUS(WINAPI *PNtOpenSession)(
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
+typedef NTSTATUS(WINAPI *PNtQuerySystemInformation)(
+   IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
+   OUT PVOID                   SystemInformation,
+   IN ULONG                    SystemInformationLength,
+   OUT PULONG                  ReturnLength
+);
+
 // ALPC types and imports
-/*
+
+typedef struct _CLIENT_ID {
+   HANDLE UniqueProcess;
+   HANDLE UniqueThread;
+} CLIENT_ID;
+
 typedef struct _ALPC_PORT_ATTRIBUTES
 {
    ULONG Flags;
@@ -202,14 +226,20 @@ typedef struct _PORT_MESSAGE
    {
       CLIENT_ID ClientId;
       double DoNotUseThisField;
-   };
+   } u3;
    ULONG MessageId;
    union
    {
       SIZE_T ClientViewSize; // only valid for LPC_CONNECTION_REQUEST messages
       ULONG CallbackId; // only valid for LPC_REQUEST messages
-   };
+   } u4;
 } PORT_MESSAGE, *PPORT_MESSAGE;
+
+typedef struct _ALPC_MESSAGE_ATTRIBUTES
+{
+   ULONG AllocatedAttributes;
+   ULONG ValidAttributes;
+} ALPC_MESSAGE_ATTRIBUTES, *PALPC_MESSAGE_ATTRIBUTES;
 
 typedef NTSTATUS(WINAPI *PNtAlpcConnectPort)(
    _Out_ PHANDLE PortHandle,
@@ -223,7 +253,7 @@ typedef NTSTATUS(WINAPI *PNtAlpcConnectPort)(
    _Inout_opt_ PALPC_MESSAGE_ATTRIBUTES OutMessageAttributes,
    _Inout_opt_ PALPC_MESSAGE_ATTRIBUTES InMessageAttributes,
    _In_opt_ PLARGE_INTEGER Timeout);
-   */
+
 // Our custom types
 
 typedef enum {
@@ -257,6 +287,8 @@ extern PNtOpenSection NtOpenEvent;
 extern PNtOpenSemaphore NtOpenSemaphore;
 extern PNtOpenTimer NtOpenTimer;
 extern PNtOpenSession NtOpenSession;
+extern PNtAlpcConnectPort NtAlpcConnectPort;
+extern PNtQuerySystemInformation NtQuerySystemInformation;
 
 int resolve_imports();
 int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, HANDLE *phOut);
@@ -271,6 +303,7 @@ int open_nt_semaphore_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
 int open_nt_timer_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_session_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
+int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_unsupported_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int foreach_nt_object(PCTSTR swzNTPath, nt_object_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
 int foreach_nt_directory_files(PCTSTR swzDirectoryFileNTPath, nt_file_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);

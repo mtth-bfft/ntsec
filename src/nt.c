@@ -25,6 +25,7 @@ static const nt_object_open_t pNTObjectTypes[][2] = {
    { (nt_object_open_t) TEXT("Device"),               &open_nt_file_object },
    { (nt_object_open_t) TEXT("Session"),              &open_nt_session_object },
    { (nt_object_open_t) TEXT("FilterConnectionPort"), &open_nt_filterconnectionport_object },
+   { (nt_object_open_t) TEXT("ALPC Port"),            &open_nt_alpcconnectionport_object },
    // No way to open these from userland:
    { (nt_object_open_t) TEXT("Callback"),             &open_nt_unsupported_object },
    { (nt_object_open_t) NULL,                         NULL }
@@ -53,6 +54,25 @@ PNtOpenSection NtOpenSection = NULL;
 PNtOpenSemaphore NtOpenSemaphore = NULL;
 PNtOpenTimer NtOpenTimer = NULL;
 PNtOpenSession NtOpenSession = NULL;
+PNtAlpcConnectPort NtAlpcConnectPort = NULL;
+PNtQuerySystemInformation NtQuerySystemInformation = NULL;
+
+static int do_import_function(HMODULE hLib, PCSTR swzFunctionName, PVOID pFunctionPtr)
+{
+   int res = 0;
+   PVOID pRes = (PVOID)GetProcAddress(hLib, swzFunctionName);
+
+   if (pRes == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import '%hs', failed with code %u\n"), swzFunctionName, res);
+      goto cleanup;
+   }
+   *(PVOID*)pFunctionPtr = pRes;
+
+cleanup:
+   return res;
+}
 
 int resolve_imports()
 {
@@ -62,86 +82,48 @@ int resolve_imports()
    if (hNTDLL == NULL)
    {
       res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic imports, NTDLL load failed with code '%u'\n"), res);
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic imports, NTDLL load failed with code %u\n"), res);
       goto cleanup;
    }
-   NtOpenDirectoryObject = (PNtOpenDirectoryObject)GetProcAddress(hNTDLL, "NtOpenDirectoryObject");
-   if (NtOpenDirectoryObject == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenDirectoryObject, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenDirectoryObject", &NtOpenDirectoryObject);
+   if (res != 0)
       goto cleanup;
-   }
-   NtQueryDirectoryObject = (PNtQueryDirectoryObject)GetProcAddress(hNTDLL, "NtQueryDirectoryObject");
-   if (NtQueryDirectoryObject == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtQueryDirectoryObject, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtQueryDirectoryObject", &NtQueryDirectoryObject);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenFile = (PNtOpenFile)GetProcAddress(hNTDLL, "NtOpenFile");
-   if (NtOpenFile == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenFile, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenFile", &NtOpenFile);
+   if (res != 0)
       goto cleanup;
-   }
-   NtQueryDirectoryFile = (PNtQueryDirectoryFile)GetProcAddress(hNTDLL, "NtQueryDirectoryFile");
-   if (NtQueryDirectoryFile == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtQueryDirectoryFile, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtQueryDirectoryFile", &NtQueryDirectoryFile);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenSymbolicLinkObject = (PNtOpenSymbolicLinkObject)GetProcAddress(hNTDLL, "NtOpenSymbolicLinkObject");
-   if (NtOpenSymbolicLinkObject == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSymbolicLinkObject, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenSymbolicLinkObject", &NtOpenSymbolicLinkObject);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenMutant = (PNtOpenMutant)GetProcAddress(hNTDLL, "NtOpenMutant");
-   if (NtOpenMutant == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenMutant, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenMutant", &NtOpenMutant);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenEvent = (PNtOpenEvent)GetProcAddress(hNTDLL, "NtOpenEvent");
-   if (NtOpenEvent == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenEvent, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenEvent", &NtOpenEvent);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenSection = (PNtOpenSection)GetProcAddress(hNTDLL, "NtOpenSection");
-   if (NtOpenSection == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSection, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenSection", &NtOpenSection);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenSemaphore = (PNtOpenSemaphore)GetProcAddress(hNTDLL, "NtOpenSemaphore");
-   if (NtOpenSemaphore == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSemaphore, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenSemaphore", &NtOpenSemaphore);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenTimer = (PNtOpenTimer)GetProcAddress(hNTDLL, "NtOpenTimer");
-   if (NtOpenTimer == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenTimer, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenTimer", &NtOpenTimer);
+   if (res != 0)
       goto cleanup;
-   }
-   NtOpenSession = (PNtOpenSession)GetProcAddress(hNTDLL, "NtOpenSession");
-   if (NtOpenSession == NULL)
-   {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSession, failed with code '%u'\n"), res);
+   res = do_import_function(hNTDLL, "NtOpenSession", &NtOpenSession);
+   if (res != 0)
       goto cleanup;
-   }
+   res = do_import_function(hNTDLL, "NtAlpcConnectPort", &NtAlpcConnectPort);
+   if (res != 0)
+      goto cleanup;
+   res = do_import_function(hNTDLL, "NtQuerySystemInformation", &NtQuerySystemInformation);
+   if (res != 0)
+      goto cleanup;
 
 cleanup:
    return res;
@@ -552,9 +534,26 @@ int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired
    int res = 0;
    PWSTR swzPortName = string_to_wide(swzNTPath);
 
-   res = (int)FilterConnectCommunicationPort(swzPortName, 0, NULL, 0, NULL, phOut);
+   res = FilterConnectCommunicationPort(swzPortName, 0, NULL, 0, NULL, phOut);
 
    safe_free(swzPortName);
+   return res;
+}
+
+int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   UNREFERENCED_PARAMETER(dwRightsRequired);
+   int res = 0;
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   LARGE_INTEGER liTimeout = { 0 };
+   ULONG ulBufferLen = 0;
+
+   InitializeObjectAttributes(&objAttr, NULL, 0, NULL, NULL);
+   liTimeout.QuadPart = 1;
+   res = NtAlpcConnectPort(phOut, pUSObjName, &objAttr, NULL, 0, NULL, NULL, &ulBufferLen, NULL, NULL, &liTimeout);
+
+   safe_free(pUSObjName);
    return res;
 }
 
@@ -578,6 +577,13 @@ int open_nt_object_with_type(PCTSTR swzNTPath, PCTSTR swzType, DWORD dwRightsReq
    _ftprintf(stderr, TEXT(" [!] Warning: cannot open unsupported NT object type %s (at %s)\n"), swzType, swzNTPath);
    return ERROR_NOT_SUPPORTED;
 }
+
+/*
+int get_handle_granted_rights(HANDLE hHandle, PDWORD pdwGrantedRights)
+{
+
+}
+*/
 
 static int callback_find_nt_object_type(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData)
 {
