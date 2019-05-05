@@ -295,6 +295,7 @@ cleanup:
 int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
@@ -302,7 +303,9 @@ int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
       pUSObjName->Length -= sizeof(WCHAR);
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenDirectoryObject(phOut, dwRightsRequired, &objAttr);
+   status = NtOpenDirectoryObject(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+      res = status;
 
    safe_free(pUSObjName);
    return res;
@@ -311,13 +314,16 @@ int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
 int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
+   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    IO_STATUS_BLOCK ioStatus = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   res = NtOpenFile(phOut, dwRightsRequired, &objAttr, &ioStatus, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF);
-   
+   status = NtOpenFile(phOut, dwRightsRequired, &objAttr, &ioStatus, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF);
+   if (!NT_SUCCESS(status))
+      res = status;
+
    safe_free(pUSObjName);
    return res;
 }
