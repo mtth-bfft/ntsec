@@ -338,6 +338,7 @@ int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 int foreach_nt_object(PCTSTR swzDirectoryNTPath, nt_object_enum_callback_t pCallback, PVOID pData, BOOL bRecurse)
 {
    int res = 0;
+   BOOL bImpersonating = FALSE;
    HANDLE hDir = INVALID_HANDLE_VALUE;
    ULONG ulBufferSize = 0x1000;
    ULONG ulBufferReq = 0;
@@ -359,7 +360,29 @@ int foreach_nt_object(PCTSTR swzDirectoryNTPath, nt_object_enum_callback_t pCall
       _tcscat_s(swzChildNTPath, dwChildNTPathLen, TEXT("\\"));
    swzChildName = swzChildNTPath + _tcslen(swzChildNTPath);
 
+   // Open directories all the way doing impersonation, but only
+   // if there's an impersonation token set up and it doesn't have
+   // the SeChangeNotifyPrivilege, which allows bypassing access checks
+   // on intermediary dirs. If it has that privilege, consider it can
+   // open the file anyway (e.g. by "guessing" its path) and do the
+   // enumeration part without impersonating.
+   if (!has_privilege_impersonated_target(SE_CHANGE_NOTIFY_NAME))
+   {
+      res = start_impersonated_operation();
+      if (res != 0)
+         goto cleanup;
+      bImpersonating = TRUE;
+   }
+
    res = open_nt_directory_object(swzDirectoryNTPath, DIRECTORY_QUERY | DIRECTORY_QUERY, &hDir);
+
+   if (bImpersonating)
+   {
+      int res2 = end_impersonated_operation();
+      if (res == 0)
+         res = res2;
+   }
+
    if (res != 0)
       goto cleanup;
 
