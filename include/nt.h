@@ -215,6 +215,11 @@ typedef NTSTATUS(WINAPI *PNtOpenJobObject)(
    IN ACCESS_MASK          DesiredAccess,
    IN POBJECT_ATTRIBUTES   ObjectAttributes);
 
+typedef NTSTATUS(WINAPI *PNtOpenPartition)(
+   OUT PHANDLE             Handle,
+   IN ACCESS_MASK          DesiredAccess,
+   IN POBJECT_ATTRIBUTES   ObjectAttributes);
+
 typedef NTSTATUS(WINAPI *PNtOpenKeyEx)(
    OUT PHANDLE             KeyHandle,
    IN ACCESS_MASK          DesiredAccess,
@@ -362,6 +367,7 @@ int open_nt_semaphore_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
 int open_nt_timer_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_session_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_job_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
+int open_nt_partition_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_key_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
 int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
