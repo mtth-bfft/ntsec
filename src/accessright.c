@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sddl.h>
 #include "accessright.h"
 
@@ -83,6 +84,9 @@ PCTSTR pAccessRights[][5] = {
 
 static int parse_single_access_right(PTSTR swzDesiredAccess, PDWORD pdwDesiredAccess)
 {
+   PTSTR swzParsingEnd = NULL;
+   LONG lParsedInt = -1;
+
    for (size_t i = 0; i < sizeof(pAccessRights) / sizeof(pAccessRights[0]); i++)
    {
       if (_tcsicmp(pAccessRights[i][1], swzDesiredAccess) == 0)
@@ -91,7 +95,13 @@ static int parse_single_access_right(PTSTR swzDesiredAccess, PDWORD pdwDesiredAc
          return 0;
       }
    }
-   return ERROR_INVALID_PARAMETER;
+
+   lParsedInt = _tcstol(swzDesiredAccess, &swzParsingEnd, 0);
+   if (lParsedInt < 0 || lParsedInt == LONG_MAX || lParsedInt == LONG_MIN || swzParsingEnd == swzDesiredAccess || lParsedInt > MAXDWORD)
+      return ERROR_INVALID_PARAMETER;
+
+   *pdwDesiredAccess = lParsedInt;
+   return 0;
 }
 
 int parse_access_right(PTSTR swzDesiredAccess, PDWORD pdwDesiredAccess)
