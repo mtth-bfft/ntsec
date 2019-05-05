@@ -25,6 +25,7 @@ static const nt_object_open_t pNTObjectTypes[][2] = {
    { (nt_object_open_t) TEXT("Timer"),                &open_nt_timer_object },
    { (nt_object_open_t) TEXT("Device"),               &open_nt_file_object },
    { (nt_object_open_t) TEXT("Session"),              &open_nt_session_object },
+   { (nt_object_open_t) TEXT("Job"),                  &open_nt_job_object },
    { (nt_object_open_t) TEXT("FilterConnectionPort"), &open_nt_filterconnectionport_object },
    { (nt_object_open_t) TEXT("ALPC Port"),            &open_nt_alpcconnectionport_object },
    // No way to open these from userland:
@@ -56,6 +57,7 @@ PNtOpenSection NtOpenSection = NULL;
 PNtOpenSemaphore NtOpenSemaphore = NULL;
 PNtOpenTimer NtOpenTimer = NULL;
 PNtOpenSession NtOpenSession = NULL;
+PNtOpenJobObject NtOpenJobObject = NULL;
 PNtAlpcConnectPort NtAlpcConnectPort = NULL;
 PNtQuerySystemInformation NtQuerySystemInformation = NULL;
 
@@ -127,6 +129,9 @@ int resolve_imports()
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtOpenSession", &NtOpenSession);
+   if (res != 0)
+      goto cleanup;
+   res = do_import_function(hNTDLL, "NtOpenJobObject", &NtOpenJobObject);
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtAlpcConnectPort", &NtAlpcConnectPort);
@@ -652,6 +657,33 @@ int open_nt_session_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phO
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
    status = NtOpenSession(phOut, dwRightsRequired, &objAttr);
+   if (!NT_SUCCESS(status))
+   {
+      res = status;
+      goto cleanup;
+   }
+
+cleanup:
+   if (pUSObjName != NULL)
+      safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_job_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   NTSTATUS status = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   status = NtOpenJobObject(phOut, dwRightsRequired, &objAttr);
    if (!NT_SUCCESS(status))
    {
       res = status;

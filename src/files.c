@@ -24,8 +24,6 @@ int enumerate_files_with(DWORD dwDesiredAccess)
 {
    int res = 0;
    // First, enumerate accessible disks (some might not have a DOS letter and only be accessible through native calls)
-   (void)(dwDesiredAccess);
-   //nt_device_callback(TEXT("\\Device\\HarddiskVolume4"), string_to_unicode(TEXT("Device")));
    res = foreach_nt_object(TEXT("\\"), nt_device_callback, (PVOID)&dwDesiredAccess, TRUE);
    return res;
 }
