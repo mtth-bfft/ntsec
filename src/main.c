@@ -416,6 +416,28 @@ int _tmain(int argc, PCTSTR argv[])
          if (res != 0)
             goto cleanup;
       }
+      else if (_tcsicmp(TEXT("--ntobj-with"), arg) == 0)
+      {
+      if (argn == argc - 1)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+         print_usage();
+         goto cleanup;
+      }
+      PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+      if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+         print_usage();
+         goto cleanup;
+      }
+      res = enumerate_nt_objects_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+      }
       else
       {
          res = -1;

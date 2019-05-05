@@ -10,4 +10,5 @@ PTSTR safe_strdup(PCTSTR swzIn);
 BOOL str_starts_with(PCTSTR swzFull, PCTSTR swzPrefix);
 UNICODE_STRING* string_to_unicode(PCTSTR swzIn);
 PTSTR unicode_to_string(PUNICODE_STRING pIn);
+PWSTR string_to_wide(PCTSTR swzIn);
 VOID basedir(PTSTR swzPath);

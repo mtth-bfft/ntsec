@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
+#include <fltUser.h> // for FilterCommunicationPort objects
 #include "process.h"
 #include "registry.h"
 #include "token.h"
@@ -13,9 +14,20 @@ typedef struct {
    PTSTR swzType;
 } nt_object_lookup_t;
 
-PVOID pNTObjectTypes[][2] = {
-   { TEXT("Directory"), (PVOID)&open_nt_directory_object },
-   { NULL,              NULL}
+static const nt_object_open_t pNTObjectTypes[][2] = {
+   { (nt_object_open_t) TEXT("Directory"),            &open_nt_directory_object },
+   { (nt_object_open_t) TEXT("SymbolicLink"),         &open_nt_symbolic_link_object },
+   { (nt_object_open_t) TEXT("Mutant"),               &open_nt_mutant_object },
+   { (nt_object_open_t) TEXT("Event"),                &open_nt_event_object },
+   { (nt_object_open_t) TEXT("Section"),              &open_nt_section_object },
+   { (nt_object_open_t) TEXT("Semaphore"),            &open_nt_semaphore_object },
+   { (nt_object_open_t) TEXT("Timer"),                &open_nt_timer_object },
+   { (nt_object_open_t) TEXT("Device"),               &open_nt_file_object },
+   { (nt_object_open_t) TEXT("Session"),              &open_nt_session_object },
+   { (nt_object_open_t) TEXT("FilterConnectionPort"), &open_nt_filterconnectionport_object },
+   // No way to open these from userland:
+   { (nt_object_open_t) TEXT("Callback"),             &open_nt_unsupported_object },
+   { (nt_object_open_t) NULL,                         NULL }
 };
 
 #define OBJ_CASE_INSENSITIVE    0x00000040L
@@ -34,6 +46,13 @@ PNtOpenDirectoryObject NtOpenDirectoryObject = NULL;
 PNtQueryDirectoryObject NtQueryDirectoryObject = NULL;
 PNtOpenFile NtOpenFile = NULL;
 PNtQueryDirectoryFile NtQueryDirectoryFile = NULL;
+PNtOpenSymbolicLinkObject NtOpenSymbolicLinkObject = NULL;
+PNtOpenMutant NtOpenMutant = NULL;
+PNtOpenEvent NtOpenEvent = NULL;
+PNtOpenSection NtOpenSection = NULL;
+PNtOpenSemaphore NtOpenSemaphore = NULL;
+PNtOpenTimer NtOpenTimer = NULL;
+PNtOpenSession NtOpenSession = NULL;
 
 int resolve_imports()
 {
@@ -72,6 +91,55 @@ int resolve_imports()
    {
       res = GetLastError();
       _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtQueryDirectoryFile, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenSymbolicLinkObject = (PNtOpenSymbolicLinkObject)GetProcAddress(hNTDLL, "NtOpenSymbolicLinkObject");
+   if (NtOpenSymbolicLinkObject == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSymbolicLinkObject, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenMutant = (PNtOpenMutant)GetProcAddress(hNTDLL, "NtOpenMutant");
+   if (NtOpenMutant == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenMutant, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenEvent = (PNtOpenEvent)GetProcAddress(hNTDLL, "NtOpenEvent");
+   if (NtOpenEvent == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenEvent, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenSection = (PNtOpenSection)GetProcAddress(hNTDLL, "NtOpenSection");
+   if (NtOpenSection == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSection, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenSemaphore = (PNtOpenSemaphore)GetProcAddress(hNTDLL, "NtOpenSemaphore");
+   if (NtOpenSemaphore == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSemaphore, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenTimer = (PNtOpenTimer)GetProcAddress(hNTDLL, "NtOpenTimer");
+   if (NtOpenTimer == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenTimer, failed with code '%u'\n"), res);
+      goto cleanup;
+   }
+   NtOpenSession = (PNtOpenSession)GetProcAddress(hNTDLL, "NtOpenSession");
+   if (NtOpenSession == NULL)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: cannot resolve dynamic import NtOpenSession, failed with code '%u'\n"), res);
       goto cleanup;
    }
 
@@ -202,7 +270,10 @@ int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, H
    {
       res = open_nt_object(swzTarget, dwRightsRequired, phOut);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: opening NT object %s failed with code 0x%08X\n"), swzTarget, res);
          goto cleanup;
+      }
    }
    else
    {
@@ -217,7 +288,6 @@ cleanup:
 int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
-   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
@@ -225,12 +295,7 @@ int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
       pUSObjName->Length -= sizeof(WCHAR);
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   status = NtOpenDirectoryObject(phOut, dwRightsRequired, &objAttr);
-   if (status != STATUS_SUCCESS)
-   {
-      res = status;
-      _ftprintf(stderr, TEXT(" [!] Warning: opening NT directory object '%.*ws' failed with status 0x%08X\n"), pUSObjName->Length, pUSObjName->Buffer, res);
-   }
+   res = NtOpenDirectoryObject(phOut, dwRightsRequired, &objAttr);
 
    safe_free(pUSObjName);
    return res;
@@ -239,19 +304,13 @@ int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
 int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
-   NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    IO_STATUS_BLOCK ioStatus = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   status = NtOpenFile(phOut, dwRightsRequired, &objAttr, &ioStatus, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF);
-   if (status != STATUS_SUCCESS)
-   {
-      res = status;
-      _ftprintf(stderr, TEXT(" [!] Warning: opening NT file object '%.*ws' failed with status 0x%08X\n"), pUSObjName->Length, pUSObjName->Buffer, res);
-   }
-
+   res = NtOpenFile(phOut, dwRightsRequired, &objAttr, &ioStatus, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF);
+   
    safe_free(pUSObjName);
    return res;
 }
@@ -396,15 +455,128 @@ cleanup:
    return 0;
 }
 
+int open_nt_symbolic_link_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   res = NtOpenSymbolicLinkObject(phOut, dwRightsRequired, &objAttr);
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_mutant_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   res = NtOpenMutant(phOut, dwRightsRequired, &objAttr);
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_event_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   res = NtOpenEvent(phOut, dwRightsRequired, &objAttr);
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_section_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   res = NtOpenSection(phOut, dwRightsRequired, &objAttr);
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_semaphore_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   res = NtOpenSemaphore(phOut, dwRightsRequired, &objAttr);
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_timer_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   res = NtOpenTimer(phOut, dwRightsRequired, &objAttr);
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_session_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   int res = 0;
+   OBJECT_ATTRIBUTES objAttr = { 0 };
+   PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
+
+   InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
+   res = NtOpenSession(phOut, dwRightsRequired, &objAttr);
+
+   safe_free(pUSObjName);
+   return res;
+}
+
+int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   UNREFERENCED_PARAMETER(dwRightsRequired);
+   int res = 0;
+   PWSTR swzPortName = string_to_wide(swzNTPath);
+
+   res = (int)FilterConnectCommunicationPort(swzPortName, 0, NULL, 0, NULL, phOut);
+
+   safe_free(swzPortName);
+   return res;
+}
+
+int open_nt_unsupported_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+{
+   UNREFERENCED_PARAMETER(swzNTPath);
+   UNREFERENCED_PARAMETER(dwRightsRequired);
+   UNREFERENCED_PARAMETER(phOut);
+   return ERROR_NOT_SUPPORTED;
+}
+
 int open_nt_object_with_type(PCTSTR swzNTPath, PCTSTR swzType, DWORD dwRightsRequired, HANDLE *phOut)
 {
-   if (_tcsicmp(swzType, TEXT("Device")) == 0)
-      return open_nt_file_object(swzNTPath, dwRightsRequired, phOut);
-   else
+   for (SIZE_T i = 0; pNTObjectTypes[i][0] != NULL; i++)
    {
-      _ftprintf(stderr, TEXT(" [!] Warning: cannot open unsupported NT object type %s (at %s)\n"), swzType, swzNTPath);
-      return ERROR_NOT_SUPPORTED;
+      if (_tcsicmp((PCTSTR)pNTObjectTypes[i][0], swzType) == 0)
+      {
+         return pNTObjectTypes[i][1](swzNTPath, dwRightsRequired, phOut);
+      }
    }
+   _ftprintf(stderr, TEXT(" [!] Warning: cannot open unsupported NT object type %s (at %s)\n"), swzType, swzNTPath);
+   return ERROR_NOT_SUPPORTED;
 }
 
 static int callback_find_nt_object_type(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData)
@@ -472,15 +644,27 @@ cleanup:
    return res;
 }
 
-/*
 static int nt_object_callback(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData)
 {
    int res = 0;
+   DWORD dwDesiredAccess = *(PDWORD)pData;
+   PTSTR swzType = unicode_to_string(usObjType);
+   HANDLE hObj = INVALID_HANDLE_VALUE;
 
-
+   res = open_nt_object_with_type(swzNTPath, swzType, dwDesiredAccess, &hObj);
+   if (res == 0)
+   {
+      _tprintf(TEXT(" %s (%s)\n"), swzNTPath, swzType);
+      CloseHandle(hObj);
+   }
+   else if (res != STATUS_ACCESS_DENIED && res != ERROR_NOT_SUPPORTED && res != 0x80070005) // TODO: migrate nt_object_open_t to return a HRESULT
+   {
+      _tprintf(TEXT(" [!] Warning: failed to open NT object %s (%s) : code 0x%08X\n"), swzNTPath, swzType, res);
+   }
+   return 0;
 }
 
 int enumerate_nt_objects_with(DWORD dwDesiredAccess)
 {
    return foreach_nt_object(TEXT("\\"), nt_object_callback, &dwDesiredAccess, TRUE);
-}*/
+}

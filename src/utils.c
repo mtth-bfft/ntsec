@@ -88,3 +88,12 @@ VOID basedir(PTSTR swzPath)
       swzPath--;
    }
 }
+
+PWSTR string_to_wide(PCTSTR swzIn)
+{
+#ifdef UNICODE
+   return safe_dup(swzIn, (wcslen(swzIn) + 1) * sizeof(WCHAR));
+#else
+#error Not implemented.
+#endif
+}
