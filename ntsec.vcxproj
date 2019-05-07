@@ -153,6 +153,7 @@
     <ClCompile Include="src\accessright.c" />
     <ClCompile Include="src\files.c" />
     <ClCompile Include="src\main.c" />
+    <ClCompile Include="src\mitigations.c" />
     <ClCompile Include="src\nt.c" />
     <ClCompile Include="src\process.c" />
     <ClCompile Include="src\registry.c" />
@@ -163,6 +164,7 @@
   <ItemGroup>
     <ClInclude Include="include\accessright.h" />
     <ClInclude Include="include\files.h" />
+    <ClInclude Include="include\mitigations.h" />
     <ClInclude Include="include\nt.h" />
     <ClInclude Include="include\process.h" />
     <ClInclude Include="include\registry.h" />

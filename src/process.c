@@ -62,10 +62,78 @@ int find_process_by_name(PCTSTR swzName, DWORD *pdwPID)
    else
       *pdwPID = dwPID;
 
-   cleanup:
+cleanup:
    if (hSnapshot != INVALID_HANDLE_VALUE)
-   CloseHandle(hSnapshot);
+      CloseHandle(hSnapshot);
    if (swzPattern != NULL)
-   safe_free(swzPattern);
+      safe_free(swzPattern);
+   return res;
+}
+
+int open_process(DWORD dwPID, DWORD dwRightsRequired, PHANDLE phOut)
+{
+   int res = 0;
+   HANDLE hProc = NULL;
+
+   if (phOut == NULL || (*phOut != INVALID_HANDLE_VALUE && *phOut != NULL))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   hProc = OpenProcess(dwRightsRequired, FALSE, dwPID);
+   if (hProc == NULL)
+   {
+      res = GetLastError();
+      goto cleanup;
+   }
+
+   *phOut = hProc;
+
+cleanup:
+   return res;
+}
+
+int enumerate_processes_with(DWORD dwDesiredAccess)
+{
+   int res = 0;
+   HANDLE hSnapshot = INVALID_HANDLE_VALUE;
+   PROCESSENTRY32 procEntry = { 0 };
+   DWORD dwPID = 0;
+
+   ZeroMemory(&procEntry, sizeof(procEntry));
+   procEntry.dwSize = sizeof(procEntry);
+
+   hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+   if (!Process32First(hSnapshot, &procEntry))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: Process32First() failed with code %u\n"), res);
+      goto cleanup;
+   }
+   do
+   {
+      HANDLE hProc = INVALID_HANDLE_VALUE;
+
+      if (procEntry.th32ProcessID == 0)
+         continue; // skip the idle pseudo-process
+
+      res = open_process(procEntry.th32ProcessID, dwDesiredAccess, &hProc);
+      if (res == 0)
+      {
+         _tprintf(TEXT(" [.] Process %u (%s)\n"), procEntry.th32ProcessID, procEntry.szExeFile);
+         CloseHandle(hProc);
+      }
+      else if (res != ERROR_ACCESS_DENIED)
+      {
+         _ftprintf(stderr, TEXT(" [!] Warning: opening process %u (%s) failed with code %u\n"), dwPID, procEntry.szExeFile, res);
+      }
+   }
+   while (Process32Next(hSnapshot, &procEntry));
+
+cleanup:
+   if (hSnapshot != INVALID_HANDLE_VALUE)
+      CloseHandle(hSnapshot);
    return res;
 }

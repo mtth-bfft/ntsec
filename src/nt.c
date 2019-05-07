@@ -191,14 +191,9 @@ int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, H
          }
       }
       _tprintf(TEXT(" [.] Operating on process %u\n"), dwTargetPID);
-      hRes = OpenProcess(dwRightsRequired, FALSE, dwTargetPID);
-      if (hRes == NULL)
-      {
-         res = GetLastError();
-         _ftprintf(stderr, TEXT(" [!] Error: opening process %u failed with code %u\n"), dwTargetPID, res);
+      res = open_process(dwTargetPID, dwRightsRequired, phOut);
+      if (res != 0)
          goto cleanup;
-      }
-      *phOut = hRes;
    }
    else if (targetType == TARGET_THREAD)
    {

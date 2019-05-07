@@ -8,14 +8,18 @@
 #include "nt.h"
 #include "securitydescriptor.h"
 #include "accessright.h"
+#include "mitigations.h"
 #include "files.h"
+#include "process.h"
 #include "utils.h"
 
 int verbosity = 0;
+BOOL bAlwaysYes = FALSE;
+BOOL bAlwaysNo = FALSE;
 
 static void print_version()
 {
-   _ftprintf(stderr, TEXT("ntsec v1.0 - https://github.com/mtth-bfft/ntsec \n\n"));
+   _ftprintf(stderr, TEXT("ntsec v1.0 - https://github.com/mtth-bfft/ntsec \n"));
 }
 
 static void print_usage()
@@ -27,55 +31,66 @@ static void print_usage()
    _ftprintf(stderr, TEXT("to confirm an elevation operation, if one is deemed possible. To avoid hanging indefinitely in\n"));
    _ftprintf(stderr, TEXT("case user interaction is impossible, use `-n`.\n"));
    _ftprintf(stderr, TEXT("\n"));
+   _ftprintf(stderr, TEXT("Supported object types: process, thread, token, file, directory, namedpipe, pipe, filemap,\n"));
+   _ftprintf(stderr, TEXT("                        service, regkey, job, event, mutex, semaphore, timer, mempartition\n"));
+   _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Select a securable object:\n"));
-   _ftprintf(stderr, TEXT("   -p --process <pid>|<name>|caller    select the given process by .exe name or id\n"));
-   _ftprintf(stderr, TEXT("   -t --thread  <tid>|current          select the given thread by id, or ntsec's main and only thread\n"));
-   _ftprintf(stderr, TEXT("   -r --regkey  <key>                  select the given registry key by name\n"));
-   _ftprintf(stderr, TEXT("   -f --file    <path>                 select the given file or directory by NT or Win32 path\n"));
-   _ftprintf(stderr, TEXT("   -o --ntobj   <nt_path>              select the given NT object (mutex, semaphore, event, job, etc.) by absolute NT path\n"));
-   _ftprintf(stderr, TEXT("   -s --service <name>                 select the given service by name\n"));
+   _ftprintf(stderr, TEXT("   -p --process <pid>|<name>|current|caller   select the given process by .exe name or id\n"));
+   _ftprintf(stderr, TEXT("   -t --thread  <tid>|current                 select the given thread by id\n"));
+   _ftprintf(stderr, TEXT("   -r --regkey  <nt_path>|<win32_path>        select the given registry key by NT or Win32 path\n"));
+   _ftprintf(stderr, TEXT("   -f --file    <nt_path>|<win32_path>        select the given file object by NT or Win32 path\n"));
+   _ftprintf(stderr, TEXT("   -o --ntobj   <nt_path>                     select the given NT object (device, alpc port, etc.)\n"));
+   _ftprintf(stderr, TEXT("   -s --service <name>                        select the given service by short name\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Generic operations for all types:\n"));
-   _ftprintf(stderr, TEXT("   --show-sd                     describe security descriptor of the selected object\n"));
-   _ftprintf(stderr, TEXT("   --show-sddl                   display SD of the selected object as a string\n"));
+   _ftprintf(stderr, TEXT("   --sddl [new_sddl]            display (or replace) the security descriptor, as a SDDL string\n"));
+   _ftprintf(stderr, TEXT("   --show-sd                    show the security descriptor as text\n"));
+   _ftprintf(stderr, TEXT("   --explain-sd                 show the security descriptor, describing each access right\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Operations on processes:\n"));
-   _ftprintf(stderr, TEXT("   --open-token                  select the process' primary token\n"));
-   _ftprintf(stderr, TEXT("   --steal-token <cmd>           steal the process' primary token by executing the given command as a reparented process\n"));
+   _ftprintf(stderr, TEXT("   --open-token                 select the process' primary token\n"));
+   _ftprintf(stderr, TEXT("   --list-mitigations           display status of each process mitigation policy\n"));
+   _ftprintf(stderr, TEXT("   --list-handles               list all open handles, their target and permissions\n"));
+   _ftprintf(stderr, TEXT("   --list-memmap                list all memory mappings and their permissions\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Operations on threads:\n"));
-   _ftprintf(stderr, TEXT("   --open-token                  select the thread' impersonation token, if any\n"));
+   _ftprintf(stderr, TEXT("   --open-token                 select the thread' impersonation token, if any\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Operations on access tokens:\n"));
-   _ftprintf(stderr, TEXT("   --show-token                  display user, groups, privileges, etc.\n"));
-   _ftprintf(stderr, TEXT("   -e --enable-priv  <name>      enable a disabled privilege (use * as wildcard)\n"));
-   _ftprintf(stderr, TEXT("   -d --disable-priv <name>      disable an enabled privilege (use * as wildcard)\n"));
-   _ftprintf(stderr, TEXT("   --remove-priv     <name>      remove a privilege entirely (cannot be undone, use * as wildcard)\n"));
-   _ftprintf(stderr, TEXT("   --assign <tid>                set the given thread's impersonation token to be the selected token\n"));
-   _ftprintf(stderr, TEXT("   --impersonate                 impersonate the selected token for operations that follow\n"));
-   _ftprintf(stderr, TEXT("                                 (requires SeImpersonatePrivilege)\n"));
-   _ftprintf(stderr, TEXT("   --stop-impersonating          stop impersonating for operations that follow\n"));
-   _ftprintf(stderr, TEXT("   -x --execute <cmd>            create a process executing that command, with the selected token\n"));
-   _ftprintf(stderr, TEXT("                                 (requires SeAssignPrimaryTokenPrivilege)\n"));
+   _ftprintf(stderr, TEXT("   --list-sids                  lists all SIDs held and their attributes\n"));
+   _ftprintf(stderr, TEXT("   --list-privs                 lists all privileges held and their status\n"));
+   _ftprintf(stderr, TEXT("   --show-token                 display user, groups, integrity, privileges, etc.\n"));
+   _ftprintf(stderr, TEXT("   -e --enable-priv  <name>     enable a disabled privilege (use * as wildcard)\n"));
+   _ftprintf(stderr, TEXT("   -d --disable-priv <name>     disable an enabled privilege (use * as wildcard)\n"));
+   _ftprintf(stderr, TEXT("   --remove-priv     <name>     remove a privilege entirely (cannot be undone, use * as wildcard)\n"));
+   _ftprintf(stderr, TEXT("   --assign <tid>               set the given thread's impersonation token to be the selected token\n"));
+   _ftprintf(stderr, TEXT("   --impersonate                impersonate the selected token for operations that follow\n"));
+   _ftprintf(stderr, TEXT("                                (requires SeImpersonatePrivilege)\n"));
+   _ftprintf(stderr, TEXT("   --stop-impersonating         stop impersonating for operations that follow\n"));
+   _ftprintf(stderr, TEXT("   -x --execute <cmd>           create a process holding a copy of the selected token (requires an opened\n"));
+   _ftprintf(stderr, TEXT("                                process with PROCESS_CREATE_PROCESS rights, or SeAssignPrimaryTokenPrivilege)\n"));
    _ftprintf(stderr, TEXT("\n"));
-   _ftprintf(stderr, TEXT("Enumerate objects with a given criteria (doesn't select any of them) (mostly useful while impersonating a token):\n"));
-   _ftprintf(stderr, TEXT("   --ntobj-with <access_right>                 shows all NT objects on which we have the given access right\n"));
-   _ftprintf(stderr, TEXT("   --files-with <access_right>                 shows all files on which we have the given access right\n"));
-   _ftprintf(stderr, TEXT("   --keys-with  <access_right>                 shows all registry keys on which we have the given access right\n"));
-   _ftprintf(stderr, TEXT("   --proc-with  <access_right|sid|privilege>   shows all processes on which we have the given access right, or who\n"));
-   _ftprintf(stderr, TEXT("                                               hold a primary token containing the given SID or privilege name\n"));
-   _ftprintf(stderr, TEXT("   --thread-with <access_right|sid|privilege>  shows all threads on which we have the given access right, or who\n"));
-   _ftprintf(stderr, TEXT("                                               hold an impersonation token containing the given SID or privilege name\n"));
+   _ftprintf(stderr, TEXT("Enumerate accessible objects (optionally on which we have a specific access right, or another criteria)\n"));
+   _ftprintf(stderr, TEXT("Takes privileges/open handles into account. Doesn't select objects, use while impersonating a token:\n"));
+   _ftprintf(stderr, TEXT("   --processes-with [access_right]|[sid]|[privilege]\n"));
+   _ftprintf(stderr, TEXT("   --threads-with   [access_right]|[sid]|[privilege]\n"));
+   _ftprintf(stderr, TEXT("   --regkeys-with   [access_right]\n"));
+   _ftprintf(stderr, TEXT("   --files-with     [access_right]\n"));
+   _ftprintf(stderr, TEXT("   --ntobjs-with    [access_right]\n"));
+   _ftprintf(stderr, TEXT("   --services-with  [access_right]\n"));
+   _ftprintf(stderr, TEXT("   --anything-with  [access_right]\n"));
    _ftprintf(stderr, TEXT("\n"));
-   _ftprintf(stderr, TEXT("Convenience functions to pretty print security descriptors:\n"));
-   _ftprintf(stderr, TEXT("   --explain-sd [<type>:]<sddl>  describe as text the given security descriptor definition language\n"));
+   _ftprintf(stderr, TEXT("Convenience function to explain security descriptors:\n"));
+   _ftprintf(stderr, TEXT("   --explain-sd  [type:]<sddl>  describe as text the given SDDL string, optionally with an object type\n"));
+   _ftprintf(stderr, TEXT("   --resolve-sid <sid>|<name>   resolve a name to a SID, and vice versa\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Options:\n"));
-   _ftprintf(stderr, TEXT("   -y --yes                      don't prompt for consent, assume yes\n"));
-   _ftprintf(stderr, TEXT("   -n --no                       don't prompt for consent, assume no\n"));
-   _ftprintf(stderr, TEXT("   -v --verbose                  increase verbosity (can be repeated)\n"));
-   _ftprintf(stderr, TEXT("   -h --help                     display this help text\n"));
-   _ftprintf(stderr, TEXT("   -V --version                  display the current version\n"));
+   _ftprintf(stderr, TEXT("   -i --interactive             drop to an interactive pseudo-shell\n"));
+   _ftprintf(stderr, TEXT("   -y --yes                     don't prompt for consent, assume yes\n"));
+   _ftprintf(stderr, TEXT("   -n --no                      don't prompt for consent, assume no\n"));
+   _ftprintf(stderr, TEXT("   -v --verbose                 increase verbosity (can be repeated)\n"));
+   _ftprintf(stderr, TEXT("   -h --help                    display this help text\n"));
+   _ftprintf(stderr, TEXT("   -V --version                 display the current version\n"));
    _ftprintf(stderr, TEXT("\n"));
 }
 
@@ -108,11 +123,37 @@ int _tmain(int argc, PCTSTR argv[])
          print_usage();
          goto cleanup;
       }
-      else if (_tcsicmp(TEXT("-V"), arg) == 0 || _tcsicmp(TEXT("--version"), arg) == 0)
+      else if (_tcscmp(TEXT("-V"), arg) == 0 || _tcsicmp(TEXT("--version"), arg) == 0)
       {
          res = 1;
          print_version();
          goto cleanup;
+      }
+      else if (_tcscmp(TEXT("-v"), arg) == 0 || _tcsicmp(TEXT("--verbose"), arg) == 0)
+      {
+         verbosity++;
+      }
+      else if (_tcscmp(TEXT("-n"), arg) == 0 || _tcsicmp(TEXT("--no"), arg) == 0)
+      {
+         bAlwaysNo = TRUE;
+         if (bAlwaysYes)
+         {
+            res = 1;
+            _ftprintf(stderr, TEXT(" [!] Error: options --no and --yes are mutually exclusive\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      else if (_tcscmp(TEXT("-y"), arg) == 0 || _tcsicmp(TEXT("--yes"), arg) == 0)
+      {
+         bAlwaysYes = TRUE;
+         if (bAlwaysNo)
+         {
+            res = 1;
+            _ftprintf(stderr, TEXT(" [!] Error: options --no and --yes are mutually exclusive\n"));
+            print_usage();
+            goto cleanup;
+         }
       }
       else if (_tcsicmp(TEXT("-p"), arg) == 0 || _tcsicmp(TEXT("--process"), arg) == 0)
       {
@@ -380,7 +421,28 @@ int _tmain(int argc, PCTSTR argv[])
          }
          DeleteProcThreadAttributeList(pAttrList);
          safe_free(pAttrList);
+         CloseHandle(hProcess);
          _tprintf(TEXT(" [.] Token stolen by child process %u executing %s\n"), procInfo.dwProcessId, swzTargetCommand);
+      }
+      else if (_tcsicmp(TEXT("--list-mitigations"), arg) == 0)
+      {
+         HANDLE hProcess = INVALID_HANDLE_VALUE;
+
+         if (targetType != TARGET_PROCESS)
+         {
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --list-mitigations only works with a target process selected\n"));
+            print_usage();
+            goto cleanup;
+         }
+
+         res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+         if (res != 0)
+            goto cleanup;
+
+         _tprintf(TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
+         res = list_process_mitigations(hProcess);
+         CloseHandle(hProcess);
       }
       else if (_tcsicmp(TEXT("--ntobj-with"), arg) == 0)
       {
@@ -401,6 +463,28 @@ int _tmain(int argc, PCTSTR argv[])
             goto cleanup;
          }
          res = enumerate_nt_objects_with(dwDesiredAccess);
+         if (res != 0)
+            goto cleanup;
+      }
+      else if (_tcsicmp(TEXT("--procs-with"), arg) == 0)
+      {
+         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
+         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+         if (argn == argc)
+         {
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --procs-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: option --procs-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = enumerate_processes_with(dwDesiredAccess);
          if (res != 0)
             goto cleanup;
       }
@@ -448,6 +532,26 @@ int _tmain(int argc, PCTSTR argv[])
          if (res != 0)
             goto cleanup;
       }
+      else if (_tcsicmp(TEXT("--sandbox-check"), arg) == 0)
+      {
+         HANDLE hProcess = INVALID_HANDLE_VALUE;
+
+         if (targetType != TARGET_PROCESS)
+         {
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --sandbox-check only works with a target process selected\n"));
+            print_usage();
+            goto cleanup;
+         }
+
+         res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+         if (res != 0)
+            goto cleanup;
+
+         _tprintf(TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
+         res = list_process_mitigations(hProcess);
+         CloseHandle(hProcess);
+      }
       else
       {
          res = -1;
@@ -456,8 +560,8 @@ int _tmain(int argc, PCTSTR argv[])
       }
    }
 
-   cleanup:
+cleanup:
    if (verbosity > 0)
-   _tprintf(TEXT(" [.] Exiting with code %d\n"), res);
+      _tprintf(TEXT(" [.] Exiting with code %d\n"), res);
    return res;
 }
