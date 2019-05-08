@@ -163,6 +163,17 @@ PCTSTR pAccessRights[][5] = {
    { (PCTSTR) TIMER_ALL_ACCESS,                   TEXT("TIMER_ALL_ACCESS"),                   NULL,        NULL,         NULL },
    { (PCTSTR) TIMER_MODIFY_STATE,                 TEXT("TIMER_MODIFY_STATE"),                 NULL,        NULL,         NULL },
    { (PCTSTR) TIMER_QUERY_STATE,                  TEXT("TIMER_QUERY_STATE"),                  NULL,        NULL,         NULL },
+   // Service specific rights
+   { (PCTSTR) SERVICE_ALL_ACCESS,                 TEXT("SERVICE_ALL_ACCESS"),                 NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_CHANGE_CONFIG,              TEXT("SERVICE_CHANGE_CONFIG"),              NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_ENUMERATE_DEPENDENTS,       TEXT("SERVICE_ENUMERATE_DEPENDENTS"),       NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_INTERROGATE,                TEXT("SERVICE_INTERROGATE"),                NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_PAUSE_CONTINUE,             TEXT("SERVICE_PAUSE_CONTINUE"),             NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_QUERY_CONFIG,               TEXT("SERVICE_QUERY_CONFIG"),               NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_QUERY_STATUS,               TEXT("SERVICE_QUERY_STATUS"),               NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_START,                      TEXT("SERVICE_START"),                      NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_STOP,                       TEXT("SERVICE_STOP"),                       NULL,        NULL,         NULL },
+   { (PCTSTR) SERVICE_USER_DEFINED_CONTROL,       TEXT("SERVICE_USER_DEFINED_CONTROL"),       NULL,        NULL,         NULL },
    // Memory partition specific rights
    { (PCTSTR) MEMORY_PARTITION_QUERY_ACCESS,      TEXT("MEMORY_PARTITION_QUERY_ACCESS"),      NULL,        NULL,         NULL },
    { (PCTSTR) MEMORY_PARTITION_MODIFY_ACCESS,     TEXT("MEMORY_PARTITION_MODIFY_ACCESS"),     NULL,        NULL,         NULL },

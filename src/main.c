@@ -11,6 +11,7 @@
 #include "mitigations.h"
 #include "files.h"
 #include "process.h"
+#include "services.h"
 #include "utils.h"
 
 int verbosity = 0;
@@ -109,10 +110,11 @@ int _tmain(int argc, PCTSTR argv[])
       goto cleanup;
    }
 
+   // Privileges that will be useful anyway if we try to access files, processes, threads, their token, or their security descriptor's SACL
    set_privilege_caller(SE_DEBUG_NAME, SE_PRIVILEGE_ENABLED);
-   set_privilege_caller(SE_SECURITY_NAME, SE_PRIVILEGE_ENABLED);
    set_privilege_caller(SE_IMPERSONATE_NAME, SE_PRIVILEGE_ENABLED);
    set_privilege_caller(SE_BACKUP_NAME, SE_PRIVILEGE_ENABLED);
+   set_privilege_caller(SE_SECURITY_NAME, SE_PRIVILEGE_ENABLED);
 
    for (int argn = 1; argn < argc; argn++)
    {
@@ -532,6 +534,29 @@ int _tmain(int argc, PCTSTR argv[])
          if (res != 0)
             goto cleanup;
       }
+      else if (_tcsicmp(TEXT("--services-with"), arg) == 0)
+      {
+         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
+         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+         if (argn == argc)
+         {
+            res = -1;
+            _ftprintf(stderr, TEXT(" [!] Error: option --services-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: option --services-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
+            print_usage();
+            goto cleanup;
+         }
+         res = enumerate_services_with(dwDesiredAccess);
+         if (res != 0)
+            goto cleanup;
+      }
+
       else if (_tcsicmp(TEXT("--sandbox-check"), arg) == 0)
       {
          HANDLE hProcess = INVALID_HANDLE_VALUE;

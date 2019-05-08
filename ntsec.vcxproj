@@ -158,6 +158,7 @@
     <ClCompile Include="src\process.c" />
     <ClCompile Include="src\registry.c" />
     <ClCompile Include="src\securitydescriptor.c" />
+    <ClCompile Include="src\services.c" />
     <ClCompile Include="src\token.c" />
     <ClCompile Include="src\utils.c" />
   </ItemGroup>
@@ -169,6 +170,7 @@
     <ClInclude Include="include\process.h" />
     <ClInclude Include="include\registry.h" />
     <ClInclude Include="include\securitydescriptor.h" />
+    <ClInclude Include="include\services.h" />
     <ClInclude Include="include\token.h" />
     <ClInclude Include="include\utils.h" />
   </ItemGroup>

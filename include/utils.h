@@ -2,6 +2,13 @@
 #include <Windows.h>
 #include <subauth.h> // forced inside every utils-using file because of UNICODE_STRING
 
+#ifndef MIN
+#define MIN(x,y) ((x)<(y) ? (x) : (y))
+#endif
+#ifndef MAX
+#define MAX(x,y) ((x)<(y) ? (y) : (x))
+#endif
+
 PVOID safe_alloc(SIZE_T dwBytes);
 PVOID safe_realloc(PVOID pBuffer, SIZE_T dwBytes);
 VOID safe_free(PVOID pBuffer);
