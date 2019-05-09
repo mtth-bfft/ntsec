@@ -137,3 +137,4 @@ cleanup:
       CloseHandle(hSnapshot);
    return res;
 }
+

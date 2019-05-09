@@ -1,7 +1,10 @@
 #include <Windows.h>
 #include <tchar.h>
+#include <shellapi.h>
 #include <stdio.h>
 #include <sddl.h>
+#include <conio.h>
+#include "main.h"
 #include "process.h"
 #include "registry.h"
 #include "token.h"
@@ -14,9 +17,14 @@
 #include "services.h"
 #include "utils.h"
 
+#define MAX_COMMAND_LEN 1000
+#define MAX_NT_PATH_LEN 1000
+
 int verbosity = 0;
 BOOL bAlwaysYes = FALSE;
 BOOL bAlwaysNo = FALSE;
+target_t targetType = TARGET_PROCESS;
+PCTSTR swzTarget = TEXT("caller");
 
 static void print_version()
 {
@@ -95,11 +103,555 @@ static void print_usage()
    _ftprintf(stderr, TEXT("\n"));
 }
 
-int _tmain(int argc, PCTSTR argv[])
+int run_interactive_loop()
 {
    int res = 0;
-   target_t targetType = TARGET_PROCESS;
-   PCTSTR swzTarget = TEXT("caller");
+   DWORD dwCmdLen = 0;
+   PTSTR swzCwd = safe_alloc((MAX_NT_PATH_LEN + 1) * sizeof(TCHAR));
+   PWSTR swzCommand = safe_alloc(MAX_COMMAND_LEN + 1);
+
+   _tcscpy_s(swzCwd, MAX_NT_PATH_LEN + 1, TEXT("\\"));
+
+   fprintf(stderr, "NT> ");
+   fflush(stderr);
+
+   while (1)
+   {
+      wint_t c = _getwch();
+      if (c == L'\x03') // Ctrl-C
+      {
+         printf("\nNT> exit\n");
+         break;
+      }
+      else if (c == L'\b') // Backspace
+      {
+         if (dwCmdLen > 0)
+         {
+            fprintf(stderr, "\x08 \x08");
+            fflush(stderr);
+            swzCommand[--dwCmdLen] = L'\x00';
+         }
+      }
+      else if (c == L'\x0D') // Enter
+      {
+         int argc = 0;
+         PWSTR *argv = NULL;
+
+         swzCommand[dwCmdLen] = L'\x00';
+         argv = CommandLineToArgvW(swzCommand, &argc);
+         if (argv == NULL)
+         {
+            res = GetLastError();
+            _ftprintf(stderr, TEXT(" [!] Error: CommandLineToArgvW() failed with code %u\n"), res);
+            goto cleanup;
+         }
+
+         fprintf(stderr, "\n");
+         if (_wcsicmp(swzCommand, L"exit") == 0 || _wcsicmp(swzCommand, L"quit") == 0)
+            goto cleanup;
+         res = process_cmdline(argc, argv);
+         if (res != 0)
+            goto cleanup;
+         dwCmdLen = 0;
+         fprintf(stderr, "NT> ");
+         fflush(stderr);
+      }
+      else if (c == L'\t')
+      {
+         // TODO: tab-completion
+      }
+      else
+      {
+         swzCommand[dwCmdLen++] = c;
+         fprintf(stderr, "%C", c);
+         fflush(stderr);
+         if (dwCmdLen == MAX_COMMAND_LEN)
+         {
+            fprintf(stderr, "\nError: command too long\n");
+            dwCmdLen = 0;
+         }
+      }
+   }
+
+cleanup:
+   if (swzCommand != NULL)
+      safe_free(swzCommand);
+   if (swzCwd != NULL)
+      safe_free(swzCwd);
+   return res;
+}
+
+int process_cmdline(int argc, PCWSTR argv[])
+{
+   int res = 0;
+
+   if (_wcsnicmp(argv[0], L"--", 2) == 0)
+      argv[0] += 2;
+   else if (_wcsnicmp(argv[0], L"-", 1) == 0)
+      argv[0]++;
+
+   if (_wcsicmp(argv[0], L"interactive") == 0 || _wcsicmp(argv[0], L"i") == 0)
+   {
+      res = run_interactive_loop();
+   }
+   else if (_tcsicmp(TEXT("help"), argv[0]) == 0 || _tcsicmp(TEXT("h"), argv[0]) == 0 || _tcsicmp(TEXT("?"), argv[0]) == 0)
+   {
+      print_usage();
+   }
+   else if (_tcsicmp(TEXT("version"), argv[0]) == 0 || _tcscmp(TEXT("V"), argv[0]) == 0)
+   {
+      print_version();
+   }
+   else if (_tcsicmp(TEXT("verbose"), argv[0]) == 0 || _tcscmp(TEXT("v"), argv[0]) == 0)
+   {
+      verbosity++;
+   }
+   else if (_tcscmp(TEXT("no"), argv[0]) == 0 || _tcsicmp(TEXT("n"), argv[0]) == 0)
+   {
+      bAlwaysNo = TRUE;
+      bAlwaysYes = FALSE;
+   }
+   else if (_tcscmp(TEXT("yes"), argv[0]) == 0 || _tcsicmp(TEXT("y"), argv[0]) == 0)
+   {
+      bAlwaysYes = TRUE;
+      bAlwaysNo = FALSE;
+   }
+   else if (_tcsicmp(TEXT("process"), argv[0]) == 0 || _tcsicmp(TEXT("p"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = 1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'process' requires a PID or image name\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_PROCESS;
+   }
+   else if (_tcsicmp(TEXT("thread"), argv[0]) == 0 || _tcsicmp(TEXT("t"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'thread' requires a TID\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_THREAD;
+   }
+   else if (_tcsicmp(TEXT("regkey"), argv[0]) == 0 || _tcsicmp(TEXT("r"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'regkey' requires an absolute path\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_REGKEY;
+   }
+   else if (_tcsicmp(TEXT("file"), argv[0]) == 0 || _tcsicmp(TEXT("f"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'file' requires a Win32 or NT path\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_FILE;
+   }
+   else if (_tcsicmp(TEXT("ntobj"), argv[0]) == 0 || _tcsicmp(TEXT("o"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'ntobj' requires an absolute NT path\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_NT_OBJECT;
+   }
+   else if (_tcsicmp(TEXT("show-sddl"), argv[0]) == 0)
+   {
+      res = print_target_sd(targetType, swzTarget, FALSE);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("show-sd"), argv[0]) == 0)
+   {
+      res = print_target_sd(targetType, swzTarget, TRUE);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("show-token"), argv[0]) == 0)
+   {
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
+         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'show-token' only works on processes, threads, and tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY, &hToken);
+      if (res != 0)
+         goto cleanup;
+      print_token(hToken);
+   }
+   else if (_tcsicmp(TEXT("open-token"), argv[0]) == 0)
+   {
+      if (targetType == TARGET_PROCESS)
+      {
+         targetType = TARGET_PRIMARY_TOKEN;
+      }
+      else if (targetType == TARGET_THREAD)
+      {
+         targetType = TARGET_IMPERSONATION_TOKEN;
+      }
+      else
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'open-token' only works on processes and threads\n"));
+         print_usage();
+         goto cleanup;
+      }
+   }
+   else if (_tcsicmp(TEXT("enable-priv"), argv[0]) == 0 || _tcsicmp(TEXT("e"), argv[0]) == 0)
+   {
+      PCTSTR swzPrivName = NULL;
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'enable-priv' requires a privilege name or wildcard\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzPrivName = argv[1];
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
+      if (res != 0)
+         goto cleanup;
+      res = set_privilege(hToken, swzPrivName, SE_PRIVILEGE_ENABLED);
+      if (res != 0)
+         goto cleanup;
+      _ftprintf(stderr, TEXT(" [.] Privilege %s enabled\n"), swzPrivName);
+   }
+   else if (_tcsicmp(TEXT("disable-priv"), argv[0]) == 0 || _tcsicmp(TEXT("-d"), argv[0]) == 0)
+   {
+      PCTSTR swzPrivName = NULL;
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'disable-priv' requires a privilege name or wildcard\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzPrivName = argv[1];
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
+      if (res != 0)
+         goto cleanup;
+      res = set_privilege(hToken, swzPrivName, 0);
+      if (res != 0)
+         goto cleanup;
+      _ftprintf(stderr, TEXT(" [.] Privilege %s disabled\n"), swzPrivName);
+   }
+   else if (_tcsicmp(TEXT("remove-priv"), argv[0]) == 0)
+   {
+      PCTSTR swzPrivName = NULL;
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'remove-priv' requires a privilege name or wildcard\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzPrivName = argv[1];
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
+      if (res != 0)
+         goto cleanup;
+      res = set_privilege(hToken, swzPrivName, SE_PRIVILEGE_REMOVED);
+      if (res != 0)
+         goto cleanup;
+      _ftprintf(stderr, TEXT(" [.] Privilege %s removed\n"), swzPrivName);
+   }
+   else if (_tcsicmp(TEXT("assign"), argv[0]) == 0)
+   {
+      HANDLE hThread = INVALID_HANDLE_VALUE;
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+      PCTSTR swzTargetThread = NULL;
+
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'assign' requires a privilege name or wildcard\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTargetThread = argv[1];
+
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_IMPERSONATE, &hToken);
+      if (res != 0)
+         goto cleanup;
+      res = open_target(swzTargetThread, TARGET_THREAD, THREAD_SET_THREAD_TOKEN, &hThread);
+      if (res != 0)
+         goto cleanup;
+      if (!SetThreadToken(&hThread, hToken))
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Error: setting thread token failed with code %u\n"), res);
+         goto cleanup;
+      }
+      _ftprintf(stderr, TEXT(" [.] Token assigned to thread %s\n"), swzTargetThread);
+   }
+   else if (_tcsicmp(TEXT("impersonate"), argv[0]) == 0)
+   {
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &hToken);
+      if (res != 0)
+         goto cleanup;
+      res = set_impersonation_token(hToken);
+      if (res != 0)
+         goto cleanup;
+      _ftprintf(stderr, TEXT(" [.] Impersonating token temporarily\n"));
+   }
+   else if (_tcsicmp(TEXT("stop-impersonating"), argv[0]) == 0)
+   {
+      if (!RevertToSelf())
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Error: reverting impersonation failed with code %u\n"), res);
+         goto cleanup;
+      }
+      _ftprintf(stderr, TEXT(" [.] Stopped impersonating token\n"));
+   }
+   else if (_tcsicmp(TEXT("list-handles"), argv[0]) == 0)
+   {
+      if (targetType != TARGET_PROCESS)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'list-handles' only works on processes\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      _ftprintf(stderr, TEXT(" [.] Handles held by process %s :\n"), swzTarget);
+      //TODO
+   }
+   else if (_tcsicmp(TEXT("steal-token"), argv[0]) == 0)
+   {
+      HANDLE hProcess = INVALID_HANDLE_VALUE;
+      PTSTR swzTargetCommand = NULL;
+      STARTUPINFOEX startInfo = { 0 };
+      PROCESS_INFORMATION procInfo = { 0 };
+      PPROC_THREAD_ATTRIBUTE_LIST pAttrList = NULL;
+      DWORD dwAttrListSize = 0;
+      ZeroMemory(&startInfo, sizeof(startInfo));
+      ZeroMemory(&procInfo, sizeof(procInfo));
+      startInfo.StartupInfo.cb = sizeof(startInfo);
+
+      if (targetType != TARGET_PROCESS)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'steal-token' only works with a target process selected\n"));
+         print_usage();
+         goto cleanup;
+      }
+      else if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: option 'steal-token' requires a command to execute\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTargetCommand = (PTSTR)argv[1];
+
+      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_CREATE_PROCESS, &hProcess);
+      if (res != 0)
+         goto cleanup;
+
+      InitializeProcThreadAttributeList(NULL, 1, 0, &dwAttrListSize);
+      pAttrList = safe_alloc(dwAttrListSize);
+      startInfo.lpAttributeList = pAttrList;
+      if (!InitializeProcThreadAttributeList(pAttrList, 1, 0, &dwAttrListSize))
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Error: InitializeProcThreadAttributeList() failed with code %u\n"), res);
+         goto cleanup;
+      }
+      if (!UpdateProcThreadAttribute(pAttrList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &hProcess, sizeof(PHANDLE), NULL, NULL))
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Error: UpdateProcThreadAttribute(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS) failed with code %u\n"), res);
+         goto cleanup;
+      }
+      if (!CreateProcess(NULL, swzTargetCommand, NULL, NULL, FALSE, CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP | EXTENDED_STARTUPINFO_PRESENT,
+         NULL, NULL, (LPSTARTUPINFO)&startInfo, &procInfo))
+      {
+         res = GetLastError();
+         DeleteProcThreadAttributeList(pAttrList);
+         safe_free(pAttrList);
+         _ftprintf(stderr, TEXT(" [!] Error: child process creation failed with code %u\n"), res);
+         goto cleanup;
+      }
+      DeleteProcThreadAttributeList(pAttrList);
+      safe_free(pAttrList);
+      CloseHandle(hProcess);
+      _ftprintf(stderr, TEXT(" [.] Token stolen by child process %u executing %s\n"), procInfo.dwProcessId, swzTargetCommand);
+   }
+   else if (_tcsicmp(TEXT("list-mitigations"), argv[0]) == 0)
+   {
+      HANDLE hProcess = INVALID_HANDLE_VALUE;
+
+      if (targetType != TARGET_PROCESS)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'list-mitigations' only works with a target process selected\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+      if (res != 0)
+         goto cleanup;
+
+      _ftprintf(stderr, TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
+      res = list_process_mitigations(hProcess);
+      CloseHandle(hProcess);
+   }
+   else if (_tcsicmp(TEXT("find-ntobj"), argv[0]) == 0)
+   {
+      PTSTR swzDesiredAccess = (PTSTR)argv[1];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      if (argc == 2)
+      {
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-ntobj' argument as an access right\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      res = enumerate_nt_objects_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("find-proc"), argv[0]) == 0)
+   {
+      PTSTR swzDesiredAccess = (PTSTR)argv[1];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      if (argc == 2)
+      {
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-proc' argument as an access right\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      res = enumerate_processes_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("find-file"), argv[0]) == 0)
+   {
+      PTSTR swzDesiredAccess = (PTSTR)argv[1];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      if (argc == 2)
+      {
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-file' argument as an access right\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      res = enumerate_files_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("find-regkey"), argv[0]) == 0)
+   {
+      PTSTR swzDesiredAccess = (PTSTR)argv[1];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      if (argc == 2)
+      {
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-regkey' argument as an access right\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      res = enumerate_keys_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("find-service"), argv[0]) == 0)
+   {
+      PTSTR swzDesiredAccess = (PTSTR)argv[1];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      if (argc == 2)
+      {
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-service' argument as an access right\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      res = enumerate_services_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("sandbox-check"), argv[0]) == 0)
+   {
+      HANDLE hProcess = INVALID_HANDLE_VALUE;
+
+      if (targetType != TARGET_PROCESS)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'sandbox-check' only works with a target process selected\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+      if (res != 0)
+         goto cleanup;
+
+      _ftprintf(stderr, TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
+      res = list_process_mitigations(hProcess);
+      CloseHandle(hProcess);
+   }
+   else
+   {
+      res = -1;
+      _ftprintf(stderr, TEXT(" [!] Error: unknown command '%s'\n"), argv[0]);
+      print_usage();
+      goto cleanup;
+   }
+
+cleanup:
+   return res;
+}
+
+int wmain(int argc, PCWSTR argv[])
+{
+   int res = 0;
 
    resolve_imports();
 
@@ -118,469 +670,25 @@ int _tmain(int argc, PCTSTR argv[])
 
    for (int argn = 1; argn < argc; argn++)
    {
-      PCTSTR arg = argv[argn];
-      if (_tcsicmp(TEXT("-h"), arg) == 0 || _tcsicmp(TEXT("-?"), arg) == 0 || _tcsicmp(TEXT("--help"), arg) == 0)
+      if (_wcsnicmp(argv[argn], L"-", 1) == 0)
       {
-         res = 1;
-         print_usage();
-         goto cleanup;
-      }
-      else if (_tcscmp(TEXT("-V"), arg) == 0 || _tcsicmp(TEXT("--version"), arg) == 0)
-      {
-         res = 1;
-         print_version();
-         goto cleanup;
-      }
-      else if (_tcscmp(TEXT("-v"), arg) == 0 || _tcsicmp(TEXT("--verbose"), arg) == 0)
-      {
-         verbosity++;
-      }
-      else if (_tcscmp(TEXT("-n"), arg) == 0 || _tcsicmp(TEXT("--no"), arg) == 0)
-      {
-         bAlwaysNo = TRUE;
-         if (bAlwaysYes)
+         PCWSTR *cmd_argv = &(argv[argn++]);
+         int cmd_argc = 1;
+         while (argn < argc && _wcsnicmp(argv[argn], L"-", 1) != 0)
          {
-            res = 1;
-            _ftprintf(stderr, TEXT(" [!] Error: options --no and --yes are mutually exclusive\n"));
-            print_usage();
-            goto cleanup;
+            cmd_argc++;
+            argn++;
          }
-      }
-      else if (_tcscmp(TEXT("-y"), arg) == 0 || _tcsicmp(TEXT("--yes"), arg) == 0)
-      {
-         bAlwaysYes = TRUE;
-         if (bAlwaysNo)
-         {
-            res = 1;
-            _ftprintf(stderr, TEXT(" [!] Error: options --no and --yes are mutually exclusive\n"));
-            print_usage();
-            goto cleanup;
-         }
-      }
-      else if (_tcsicmp(TEXT("-p"), arg) == 0 || _tcsicmp(TEXT("--process"), arg) == 0)
-      {
-         if (argn == argc - 1 || argv[argn + 1][0] == TEXT('-'))
-         {
-            res = 1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --process requires a PID or image name\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzTarget = argv[++argn];
-         targetType = TARGET_PROCESS;
-      }
-      else if (_tcsicmp(TEXT("-t"), arg) == 0 || _tcsicmp(TEXT("--thread"), arg) == 0)
-      {
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --thread requires a TID\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzTarget = argv[++argn];
-         targetType = TARGET_THREAD;
-      }
-      else if (_tcsicmp(TEXT("-r"), arg) == 0 || _tcsicmp(TEXT("--regkey"), arg) == 0)
-      {
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --regkey requires an absolute path\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzTarget = argv[++argn];
-         targetType = TARGET_REGKEY;
-      }
-      else if (_tcsicmp(TEXT("-f"), arg) == 0 || _tcsicmp(TEXT("--file"), arg) == 0)
-      {
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --file requires a Win32 or NT path\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzTarget = argv[++argn];
-         targetType = TARGET_FILE;
-      }
-      else if (_tcsicmp(TEXT("-o"), arg) == 0 || _tcsicmp(TEXT("--ntobj"), arg) == 0)
-      {
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --ntobj requires an absolute NT path\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzTarget = argv[++argn];
-         targetType = TARGET_NT_OBJECT;
-      }
-      else if (_tcsicmp(TEXT("--show-sddl"), arg) == 0)
-      {
-         res = print_target_sd(targetType, swzTarget, FALSE);
+         argn--;
+         res = process_cmdline(cmd_argc, cmd_argv);
          if (res != 0)
             goto cleanup;
-      }
-      else if (_tcsicmp(TEXT("--show-sd"), arg) == 0)
-      {
-         res = print_target_sd(targetType, swzTarget, TRUE);
-         if (res != 0)
-            goto cleanup;
-      }
-      else if (_tcsicmp(TEXT("--show-token"), arg) == 0)
-      {
-         HANDLE hToken = INVALID_HANDLE_VALUE;
-         res = get_target_token(swzTarget, targetType, TOKEN_QUERY, &hToken);
-         if (res != 0)
-            goto cleanup;
-         print_token(hToken);
-      }
-      else if (_tcsicmp(TEXT("--open-token"), arg) == 0)
-      {
-         if (targetType == TARGET_PROCESS)
-         {
-            targetType = TARGET_PRIMARY_TOKEN;
-         }
-         else if (targetType == TARGET_THREAD)
-         {
-            targetType = TARGET_IMPERSONATION_TOKEN;
-         }
-         else
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: cannot open token, selected target must be a process or thread\n"));
-            print_usage();
-            goto cleanup;
-         }
-      }
-      else if (_tcsicmp(TEXT("-e"), arg) == 0 || _tcsicmp(TEXT("--enable-priv"), arg) == 0)
-      {
-         PCTSTR swzPrivName = NULL;
-         HANDLE hToken = INVALID_HANDLE_VALUE;
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --enable-priv requires a privilege name or wildcard\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzPrivName = argv[++argn];
-         res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
-         if (res != 0)
-            goto cleanup;
-         res = set_privilege(hToken, swzPrivName, SE_PRIVILEGE_ENABLED);
-         if (res != 0)
-            goto cleanup;
-         _tprintf(TEXT(" [.] Privilege %s enabled\n"), swzPrivName);
-      }
-      else if (_tcsicmp(TEXT("-d"), arg) == 0 || _tcsicmp(TEXT("--disable-priv"), arg) == 0)
-      {
-         PCTSTR swzPrivName = NULL;
-         HANDLE hToken = INVALID_HANDLE_VALUE;
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --disable-priv requires a privilege name or wildcard\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzPrivName = argv[++argn];
-         res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
-         if (res != 0)
-            goto cleanup;
-         res = set_privilege(hToken, swzPrivName, 0);
-         if (res != 0)
-            goto cleanup;
-         _tprintf(TEXT(" [.] Privilege %s disabled\n"), swzPrivName);
-      }
-      else if (_tcsicmp(TEXT("--remove-priv"), arg) == 0)
-      {
-         PCTSTR swzPrivName = NULL;
-         HANDLE hToken = INVALID_HANDLE_VALUE;
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --remove-priv requires a privilege name or wildcard\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzPrivName = argv[++argn];
-         res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
-         if (res != 0)
-            goto cleanup;
-         res = set_privilege(hToken, swzPrivName, SE_PRIVILEGE_REMOVED);
-         if (res != 0)
-            goto cleanup;
-         _tprintf(TEXT(" [.] Privilege %s removed\n"), swzPrivName);
-      }
-      else if (_tcsicmp(TEXT("--assign"), arg) == 0)
-      {
-         HANDLE hThread = INVALID_HANDLE_VALUE;
-         HANDLE hToken = INVALID_HANDLE_VALUE;
-         PCTSTR swzTargetThread = NULL;
-
-         if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --assign requires a privilege name or wildcard\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzTargetThread = argv[++argn];
-
-         res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_IMPERSONATE, &hToken);
-         if (res != 0)
-            goto cleanup;
-         res = open_target(swzTargetThread, TARGET_THREAD, THREAD_SET_THREAD_TOKEN, &hThread);
-         if (res != 0)
-            goto cleanup;
-         if (!SetThreadToken(&hThread, hToken))
-         {
-            res = GetLastError();
-            _ftprintf(stderr, TEXT(" [!] Error: setting thread token failed with code %u\n"), res);
-            goto cleanup;
-         }
-         _tprintf(TEXT(" [.] Token assigned to thread %s\n"), swzTargetThread);
-      }
-      else if (_tcsicmp(TEXT("--impersonate"), arg) == 0)
-      {
-         HANDLE hToken = INVALID_HANDLE_VALUE;
-         res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &hToken);
-         if (res != 0)
-            goto cleanup;
-         res = set_impersonation_token(hToken);
-         if (res != 0)
-            goto cleanup;
-         _tprintf(TEXT(" [.] Impersonating token temporarily\n"));
-      }
-      else if (_tcsicmp(TEXT("--stop-impersonating"), arg) == 0)
-      {
-         if (!RevertToSelf())
-         {
-            res = GetLastError();
-            _ftprintf(stderr, TEXT(" [!] Error: reverting impersonation failed with code %u\n"), res);
-            goto cleanup;
-         }
-         _tprintf(TEXT(" [.] Stopped impersonating token\n"));
-      }
-      else if (_tcsicmp(TEXT("--steal-token"), arg) == 0)
-      {
-         HANDLE hProcess = INVALID_HANDLE_VALUE;
-         PTSTR swzTargetCommand = NULL;
-         STARTUPINFOEX startInfo = { 0 };
-         PROCESS_INFORMATION procInfo = { 0 };
-         PPROC_THREAD_ATTRIBUTE_LIST pAttrList = NULL;
-         DWORD dwAttrListSize = 0;
-         ZeroMemory(&startInfo, sizeof(startInfo));
-         ZeroMemory(&procInfo, sizeof(procInfo));
-         startInfo.StartupInfo.cb = sizeof(startInfo);
-
-         if (targetType != TARGET_PROCESS)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --steal-token only works with a target process selected\n"));
-            print_usage();
-            goto cleanup;
-         }
-         else if (argn == argc - 1)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --steal-token requires a command to execute\n"));
-            print_usage();
-            goto cleanup;
-         }
-         swzTargetCommand = (PTSTR)argv[++argn];
-
-         res = open_target(swzTarget, TARGET_PROCESS, PROCESS_CREATE_PROCESS, &hProcess);
-         if (res != 0)
-            goto cleanup;
-
-         InitializeProcThreadAttributeList(NULL, 1, 0, &dwAttrListSize);
-         pAttrList = safe_alloc(dwAttrListSize);
-         startInfo.lpAttributeList = pAttrList;
-         if (!InitializeProcThreadAttributeList(pAttrList, 1, 0, &dwAttrListSize))
-         {
-            res = GetLastError();
-            _ftprintf(stderr, TEXT(" [!] Error: InitializeProcThreadAttributeList() failed with code %u\n"), res);
-            goto cleanup;
-         }
-         if (!UpdateProcThreadAttribute(pAttrList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &hProcess, sizeof(PHANDLE), NULL, NULL))
-         {
-            res = GetLastError();
-            _ftprintf(stderr, TEXT(" [!] Error: UpdateProcThreadAttribute(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS) failed with code %u\n"), res);
-            goto cleanup;
-         }
-         if (!CreateProcess(NULL, swzTargetCommand, NULL, NULL, FALSE, CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP | EXTENDED_STARTUPINFO_PRESENT,
-            NULL, NULL, (LPSTARTUPINFO)&startInfo, &procInfo))
-         {
-            res = GetLastError();
-            DeleteProcThreadAttributeList(pAttrList);
-            safe_free(pAttrList);
-            _ftprintf(stderr, TEXT(" [!] Error: child process creation failed with code %u\n"), res);
-            goto cleanup;
-         }
-         DeleteProcThreadAttributeList(pAttrList);
-         safe_free(pAttrList);
-         CloseHandle(hProcess);
-         _tprintf(TEXT(" [.] Token stolen by child process %u executing %s\n"), procInfo.dwProcessId, swzTargetCommand);
-      }
-      else if (_tcsicmp(TEXT("--list-mitigations"), arg) == 0)
-      {
-         HANDLE hProcess = INVALID_HANDLE_VALUE;
-
-         if (targetType != TARGET_PROCESS)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --list-mitigations only works with a target process selected\n"));
-            print_usage();
-            goto cleanup;
-         }
-
-         res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
-         if (res != 0)
-            goto cleanup;
-
-         _tprintf(TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
-         res = list_process_mitigations(hProcess);
-         CloseHandle(hProcess);
-      }
-      else if (_tcsicmp(TEXT("--ntobj-with"), arg) == 0)
-      {
-         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
-         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
-         if (argn == argc)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
-         if (res != 0)
-         {
-            _ftprintf(stderr, TEXT(" [!] Error: option --ntobj-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = enumerate_nt_objects_with(dwDesiredAccess);
-         if (res != 0)
-            goto cleanup;
-      }
-      else if (_tcsicmp(TEXT("--procs-with"), arg) == 0)
-      {
-         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
-         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
-         if (argn == argc)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --procs-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
-         if (res != 0)
-         {
-            _ftprintf(stderr, TEXT(" [!] Error: option --procs-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = enumerate_processes_with(dwDesiredAccess);
-         if (res != 0)
-            goto cleanup;
-      }
-      else if (_tcsicmp(TEXT("--files-with"), arg) == 0)
-      {
-         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
-         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
-         if (argn == argc)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --files-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
-         if (res != 0)
-         {
-            _ftprintf(stderr, TEXT(" [!] Error: option --files-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = enumerate_files_with(dwDesiredAccess);
-         if (res != 0)
-            goto cleanup;
-      }
-      else if (_tcsicmp(TEXT("--keys-with"), arg) == 0)
-      {
-         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
-         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
-         if (argn == argc)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --keys-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
-         if (res != 0)
-         {
-            _ftprintf(stderr, TEXT(" [!] Error: option --keys-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = enumerate_keys_with(dwDesiredAccess);
-         if (res != 0)
-            goto cleanup;
-      }
-      else if (_tcsicmp(TEXT("--services-with"), arg) == 0)
-      {
-         PTSTR swzDesiredAccess = (PTSTR)argv[++argn];
-         DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
-         if (argn == argc)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --services-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
-         if (res != 0)
-         {
-            _ftprintf(stderr, TEXT(" [!] Error: option --services-with requires a desired access right, or MAXIMUM_ALLOWED\n"));
-            print_usage();
-            goto cleanup;
-         }
-         res = enumerate_services_with(dwDesiredAccess);
-         if (res != 0)
-            goto cleanup;
-      }
-
-      else if (_tcsicmp(TEXT("--sandbox-check"), arg) == 0)
-      {
-         HANDLE hProcess = INVALID_HANDLE_VALUE;
-
-         if (targetType != TARGET_PROCESS)
-         {
-            res = -1;
-            _ftprintf(stderr, TEXT(" [!] Error: option --sandbox-check only works with a target process selected\n"));
-            print_usage();
-            goto cleanup;
-         }
-
-         res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
-         if (res != 0)
-            goto cleanup;
-
-         _tprintf(TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
-         res = list_process_mitigations(hProcess);
-         CloseHandle(hProcess);
       }
       else
       {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: invalid argument '%s'\n"), arg);
+         res = 1;
+         _ftprintf(stderr, TEXT(" [!] Error: invalid argument '%s'\n"), argv[argn]);
+         print_usage();
          goto cleanup;
       }
    }
