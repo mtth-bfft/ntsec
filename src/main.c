@@ -15,6 +15,7 @@
 #include "include\files.h"
 #include "include\process.h"
 #include "include\services.h"
+#include "include\rpc.h"
 #include "include\utils.h"
 
 #define MAX_COMMAND_LEN 1000
@@ -680,6 +681,19 @@ int process_cmdline(int argc, PCWSTR argv[])
       _ftprintf(stderr, TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
       res = list_process_mitigations(hProcess);
       CloseHandle(hProcess);
+   }
+   else if (_tcsicmp(TEXT("list-rpcs"), argv[0]) == 0)
+   {
+      if (targetType == TARGET_FILE)
+      {
+         res = list_rpc_named_pipe(swzTarget);
+      }
+      else
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: RPC enumeration is only implemented for named pipes, for now\n"));
+         goto cleanup;
+      }
    }
    else
    {

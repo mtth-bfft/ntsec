@@ -98,7 +98,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib;Rpcrt4.lib</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -113,7 +113,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib;Rpcrt4.lib</AdditionalDependencies>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -133,7 +133,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib;Rpcrt4.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -150,7 +150,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Shlwapi.lib;FltLib.lib;Rpcrt4.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -162,6 +162,7 @@
     <ClCompile Include="src\nt.c" />
     <ClCompile Include="src\process.c" />
     <ClCompile Include="src\registry.c" />
+    <ClCompile Include="src\rpc.c" />
     <ClCompile Include="src\securitydescriptor.c" />
     <ClCompile Include="src\services.c" />
     <ClCompile Include="src\token.c" />
@@ -176,6 +177,7 @@
     <ClInclude Include="include\nt.h" />
     <ClInclude Include="include\process.h" />
     <ClInclude Include="include\registry.h" />
+    <ClInclude Include="include\rpc.h" />
     <ClInclude Include="include\securitydescriptor.h" />
     <ClInclude Include="include\services.h" />
     <ClInclude Include="include\token.h" />

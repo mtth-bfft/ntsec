@@ -41,6 +41,43 @@ cleanup:
    return 0; // Always return 0 to continue enumerating
 }
 
+static int nt_named_pipe_callback(PCTSTR swzFileNTPath, PVOID pData)
+{
+   int res = 0;
+   int res2 = 0;
+   DWORD dwDesiredAccess = *(PDWORD)pData;
+   HANDLE hFile = INVALID_HANDLE_VALUE;
+
+   res = start_impersonated_operation();
+   if (res != 0)
+      goto cleanup;
+
+   res = open_nt_file_object(swzFileNTPath, dwDesiredAccess, &hFile);
+   if (res == 0)
+   {
+      if (_tcsnicmp(TEXT("\\Device\\NamedPipe\\"), swzFileNTPath, 18) == 0)
+         swzFileNTPath += 18;
+      _tprintf(TEXT("%s\n"), swzFileNTPath);
+      if (!CloseHandle(hFile))
+         _ftprintf(stderr, TEXT(" [!] Warning: could not close file handle to %s during enumeration, code %u\n"), swzFileNTPath, GetLastError());
+   }
+   else if (res != STATUS_ACCESS_DENIED)
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: opening NT file object '%s' failed with code 0x%08X\n"), swzFileNTPath, res);
+   }
+
+   res2 = end_impersonated_operation();
+   if (res2 != 0)
+   {
+      if (res == 0)
+         res = res2;
+      goto cleanup;
+   }
+
+cleanup:
+   return 0; // Always return 0 to continue enumerating
+}
+
 static int nt_device_callback(PCTSTR swzDeviceNTPath, PUNICODE_STRING pusObjType, PVOID pData)
 {
    if (_wcsnicmp(pusObjType->Buffer, L"Device", pusObjType->Length) != 0)
@@ -70,6 +107,6 @@ int enumerate_namedpipes_with(DWORD dwDesiredAccess)
 {
    int res = 0;
    _tprintf(TEXT(" [.] Named pipes with access 0x%08X\n"), dwDesiredAccess);
-   res = foreach_nt_file(TEXT("\\Device\\NamedPipe\\"), nt_file_callback, (PVOID)&dwDesiredAccess, TRUE);
+   res = foreach_nt_file(TEXT("\\Device\\NamedPipe\\"), nt_named_pipe_callback, (PVOID)&dwDesiredAccess, TRUE);
    return res;
 }
