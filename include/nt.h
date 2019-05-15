@@ -157,6 +157,20 @@ typedef NTSTATUS(WINAPI *PNtOpenFile)(
    ULONG              ShareAccess,
    ULONG              OpenOptions);
 
+typedef NTSTATUS(WINAPI *PNtCreateFile)(
+   OUT PHANDLE           FileHandle,
+   IN ACCESS_MASK        DesiredAccess,
+   IN POBJECT_ATTRIBUTES ObjectAttributes,
+   OUT PIO_STATUS_BLOCK  IoStatusBlock,
+   IN PLARGE_INTEGER     AllocationSize,
+   IN ULONG              FileAttributes,
+   IN ULONG              ShareAccess,
+   IN ULONG              CreateDisposition,
+   IN ULONG              CreateOptions,
+   IN PVOID              EaBuffer,
+   IN ULONG              EaLength
+);
+
 typedef NTSTATUS(WINAPI *PNtQueryDirectoryFile)(
    HANDLE                 FileHandle,
    HANDLE                 Event,
@@ -338,7 +352,7 @@ typedef int(*nt_path_enum_callback_t)(PCTSTR swzNtPath, PVOID pData);
 
 extern PNtOpenDirectoryObject NtOpenDirectoryObject;
 extern PNtQueryDirectoryObject NtQueryDirectoryObject;
-extern PNtOpenFile NtOpenFile;
+extern PNtCreateFile NtCreateFile;
 extern PNtQueryDirectoryFile NtQueryDirectoryFile;
 extern PNtOpenSymbolicLinkObject NtOpenSymbolicLinkObject;
 extern PNtOpenMutant NtOpenMutant;

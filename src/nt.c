@@ -51,7 +51,7 @@ static const nt_object_open_t pNTObjectTypes[][2] = {
 
 PNtOpenDirectoryObject NtOpenDirectoryObject = NULL;
 PNtQueryDirectoryObject NtQueryDirectoryObject = NULL;
-PNtOpenFile NtOpenFile = NULL;
+PNtCreateFile NtCreateFile = NULL;
 PNtQueryDirectoryFile NtQueryDirectoryFile = NULL;
 PNtOpenSymbolicLinkObject NtOpenSymbolicLinkObject = NULL;
 PNtOpenMutant NtOpenMutant = NULL;
@@ -109,7 +109,7 @@ int resolve_imports()
    res = do_import_function(hNTDLL, "NtQueryDirectoryObject", &NtQueryDirectoryObject);
    if (res != 0)
       goto cleanup;
-   res = do_import_function(hNTDLL, "NtOpenFile", &NtOpenFile);
+   res = do_import_function(hNTDLL, "NtCreateFile", &NtCreateFile);
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtQueryDirectoryFile", &NtQueryDirectoryFile);
@@ -327,13 +327,21 @@ int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
    NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
    IO_STATUS_BLOCK ioStatus = { 0 };
+   LARGE_INTEGER liInitialSize = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
+   if (phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   status = NtOpenFile(phOut, dwRightsRequired, &objAttr, &ioStatus, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF);
+   status = NtCreateFile(phOut, dwRightsRequired, &objAttr, &ioStatus, &liInitialSize, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF, 0, NULL, 0);
    if (!NT_SUCCESS(status))
       res = status;
 
+cleanup:
    safe_free(pUSObjName);
    return res;
 }
