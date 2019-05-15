@@ -25,6 +25,7 @@ Generic operations for all types:
 Operations on processes:
    --open-token                  select the process' primary token
    --steal-token <cmd>           steal the process' primary token by executing the given command as a reparented process
+   --list-handles                list all open handles with their target and access rights
 
 Operations on threads:
    --open-token                  select the thread' impersonation token, if any

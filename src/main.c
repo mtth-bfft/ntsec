@@ -138,20 +138,22 @@ int run_interactive_loop()
          PWSTR *argv = NULL;
 
          swzCommand[dwCmdLen] = L'\x00';
-         argv = CommandLineToArgvW(swzCommand, &argc);
-         if (argv == NULL)
-         {
-            res = GetLastError();
-            _ftprintf(stderr, TEXT(" [!] Error: CommandLineToArgvW() failed with code %u\n"), res);
-            goto cleanup;
-         }
-
-         fprintf(stderr, "\n");
          if (_wcsicmp(swzCommand, L"exit") == 0 || _wcsicmp(swzCommand, L"quit") == 0)
             goto cleanup;
-         res = process_cmdline(argc, argv);
-         if (res != 0)
-            goto cleanup;
+         fprintf(stderr, "\n");
+         if (wcslen(swzCommand) > 0)
+         {
+            argv = CommandLineToArgvW(swzCommand, &argc);
+            if (argv == NULL)
+            {
+               res = GetLastError();
+               _ftprintf(stderr, TEXT(" [!] Error: CommandLineToArgvW() failed with code %u\n"), res);
+               goto cleanup;
+            }
+            res = process_cmdline(argc, argv);
+            if (res != 0)
+               goto cleanup;
+         }
          dwCmdLen = 0;
          fprintf(stderr, "NT> ");
          fflush(stderr);
@@ -446,6 +448,27 @@ int process_cmdline(int argc, PCWSTR argv[])
       _ftprintf(stderr, TEXT(" [.] Handles held by process %s :\n"), swzTarget);
       //TODO
    }
+   else if (_tcsicmp(TEXT("list-memmap"), argv[0]) == 0)
+   {
+      HANDLE hProcess = INVALID_HANDLE_VALUE;
+      if (targetType != TARGET_PROCESS)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'list-memmap' only works on processes\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      _ftprintf(stderr, TEXT(" [.] Memory map of process %s :\n"), swzTarget);
+
+      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+      if (res != 0)
+         goto cleanup;
+
+      res = list_memmap(hProcess);
+
+      CloseHandle(hProcess);
+   }
    else if (_tcsicmp(TEXT("steal-token"), argv[0]) == 0)
    {
       HANDLE hProcess = INVALID_HANDLE_VALUE;
@@ -453,7 +476,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       STARTUPINFOEX startInfo = { 0 };
       PROCESS_INFORMATION procInfo = { 0 };
       PPROC_THREAD_ATTRIBUTE_LIST pAttrList = NULL;
-      DWORD dwAttrListSize = 0;
+      SIZE_T dwAttrListSize = 0;
       ZeroMemory(&startInfo, sizeof(startInfo));
       ZeroMemory(&procInfo, sizeof(procInfo));
       startInfo.StartupInfo.cb = sizeof(startInfo);
@@ -545,7 +568,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsicmp(TEXT("find-proc"), argv[0]) == 0)
+   else if (_tcsnicmp(TEXT("find-p"), argv[0], 6) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -563,11 +586,14 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsicmp(TEXT("find-file"), argv[0]) == 0)
+   else if (_tcsnicmp(TEXT("find-f"), argv[0], 6) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
-      if (argc == 2)
+      PCTSTR swzBaseNTPath = TEXT("\\");
+      if (argc == 3)
+         swzBaseNTPath = argv[2];
+      if (argc >= 2)
       {
          res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
          if (res != 0)
@@ -577,11 +603,11 @@ int process_cmdline(int argc, PCWSTR argv[])
             goto cleanup;
          }
       }
-      res = enumerate_files_with(dwDesiredAccess);
+      res = enumerate_files_with(swzBaseNTPath, dwDesiredAccess);
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsicmp(TEXT("find-regkey"), argv[0]) == 0)
+   else if (_tcsnicmp(TEXT("find-r"), argv[0], 6) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -599,7 +625,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsicmp(TEXT("find-service"), argv[0]) == 0)
+   else if (_tcsnicmp(TEXT("find-s"), argv[0], 6) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -614,6 +640,24 @@ int process_cmdline(int argc, PCWSTR argv[])
          }
       }
       res = enumerate_services_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("find-namedpipe"), argv[0]) == 0)
+   {
+      PTSTR swzDesiredAccess = (PTSTR)argv[1];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      if (argc == 2)
+      {
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-namedpipe' argument as an access right\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      res = enumerate_namedpipes_with(dwDesiredAccess);
       if (res != 0)
          goto cleanup;
    }

@@ -71,7 +71,7 @@ PNtQuerySystemInformation NtQuerySystemInformation = NULL;
 static int do_import_function(HMODULE hLib, PCSTR swzFunctionName, PVOID pFunctionPtr)
 {
    int res = 0;
-   PVOID pRes = (PVOID)GetProcAddress(hLib, swzFunctionName);
+   PVOID pRes = NULL;
 
    if (hLib == NULL || hLib == INVALID_HANDLE_VALUE || swzFunctionName == NULL || pFunctionPtr == NULL || *(PVOID*)pFunctionPtr != NULL)
    {
@@ -79,6 +79,7 @@ static int do_import_function(HMODULE hLib, PCSTR swzFunctionName, PVOID pFuncti
       goto cleanup;
    }
 
+   pRes = (PVOID)GetProcAddress(hLib, swzFunctionName);
    if (pRes == NULL)
    {
       res = GetLastError();
@@ -301,6 +302,12 @@ int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
    OBJECT_ATTRIBUTES objAttr = { 0 };
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
 
+   if (swzNTPath == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
    if (pUSObjName->Length > sizeof(WCHAR) && pUSObjName->Buffer[(pUSObjName->Length / sizeof(WCHAR)) - 1] == TEXT('\\'))
       pUSObjName->Length -= sizeof(WCHAR);
 
@@ -309,6 +316,7 @@ int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *p
    if (!NT_SUCCESS(status))
       res = status;
 
+cleanup:
    safe_free(pUSObjName);
    return res;
 }
@@ -370,16 +378,21 @@ int foreach_nt_object(PCTSTR swzDirectoryNTPath, nt_object_enum_callback_t pCall
    }
 
    res = open_nt_directory_object(swzDirectoryNTPath, DIRECTORY_QUERY | DIRECTORY_QUERY, &hDir);
-
    if (bImpersonating)
    {
       int res2 = end_impersonated_operation();
-      if (res == 0)
-         res = res2;
+      if (res2 != 0)
+      {
+         if (res == 0)
+            res = res2;
+         goto cleanup;
+      }
    }
-
    if (res != 0)
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: opening NT directory object %s failed with code 0x%08X\n"), swzDirectoryNTPath, res);
       goto cleanup;
+   }
 
    status = NtQueryDirectoryObject(hDir, (PVOID)pBuffer, ulBufferSize, TRUE, TRUE, &ulContext, &ulBufferReq);
    while (status == 0)
@@ -400,9 +413,6 @@ int foreach_nt_object(PCTSTR swzDirectoryNTPath, nt_object_enum_callback_t pCall
       _ftprintf(stderr, TEXT(" [!] Warning: unable to list contents of NT directory %s, code 0x%08X\n"), swzDirectoryNTPath, status);
       goto cleanup;
    }
-
-   (void)(pCallback);
-   (void)(bRecurse);
 
 cleanup:
    if (hDir != INVALID_HANDLE_VALUE && hDir != NULL && !CloseHandle(hDir))
@@ -457,8 +467,12 @@ int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCall
    if (bImpersonating)
    {
       int res2 = end_impersonated_operation();
-      if (res == 0)
-         res = res2;
+      if (res2 != 0)
+      {
+         if (res == 0)
+            res = res2;
+         goto cleanup;
+      }
    }
 
    if (res != 0)
@@ -480,19 +494,19 @@ int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCall
             pFile = safe_realloc(pFile, ulFileBufSize);
             continue;
          }
-         _ftprintf(stderr, TEXT(" [!] Warning: querying NT device object '%s' failed with status 0x%08X\n"), swzDirectoryFileNTPath, status);
+         _ftprintf(stderr, TEXT(" [!] Warning: querying NT directory file object '%s' failed with status 0x%08X\n"), swzDirectoryFileNTPath, status);
          goto cleanup;
       }
       else if (WaitForSingleObject(hDir, INFINITE) != WAIT_OBJECT_0)
       {
-         _ftprintf(stderr, TEXT(" [!] Warning: failed to wait for NT device object '%s' enum, code %u\n"), swzDirectoryFileNTPath, GetLastError());
+         _ftprintf(stderr, TEXT(" [!] Warning: failed to wait for NT directory file object '%s' enum, code %u\n"), swzDirectoryFileNTPath, GetLastError());
          break;
       }
       else if (!NT_SUCCESS(ioStatus._result.Status))
       {
          if (ioStatus._result.Status == STATUS_NO_MORE_FILES)
             break;
-         _ftprintf(stderr, TEXT(" [!] Warning: querying NT device object '%s' failed with ioStatus 0x%08X\n"), swzDirectoryFileNTPath, ioStatus._result.Status);
+         _ftprintf(stderr, TEXT(" [!] Warning: querying NT directory file object '%s' failed with ioStatus 0x%08X\n"), swzDirectoryFileNTPath, ioStatus._result.Status);
          goto cleanup;
       }
       else if (_wcsnicmp(pFile->FileName, L"..", pFile->FileNameLength / sizeof(WCHAR)) == 0)

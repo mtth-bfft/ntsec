@@ -40,14 +40,14 @@ enum
    ADS_RIGHT_DS_CONTROL_ACCESS = 0x100
 }  ADS_RIGHTS_ENUM;
 
-PCTSTR pAccessRights[][5] = {
+PCTSTR pAccessRights[][5] = { // TODO: refactor this horror into something usable
    // Generic access rights
-   { (PCTSTR) MAXIMUM_ALLOWED,                    TEXT("MAXIMUM_ALLOWED"),                    NULL,        NULL,         NULL },
-   { (PCTSTR) GENERIC_READ,                       TEXT("GENERIC_READ"),                       TEXT("GR"),  NULL,         NULL },
-   { (PCTSTR) GENERIC_WRITE,                      TEXT("GENERIC_WRITE"),                      TEXT("GW"),  NULL,         NULL },
-   { (PCTSTR) GENERIC_EXECUTE,                    TEXT("GENERIC_EXECUTE"),                    TEXT("GE"),  NULL,         NULL },
-   { (PCTSTR) GENERIC_ALL,                        TEXT("GENERIC_ALL"),                        TEXT("GA"),  NULL,         NULL },
-   { (PCTSTR) ACCESS_SYSTEM_SECURITY,             TEXT("ACCESS_SYSTEM_SECURITY"),             TEXT("AS"),  NULL,         NULL },
+   { (PCTSTR)(SIZE_T) MAXIMUM_ALLOWED,            TEXT("MAXIMUM_ALLOWED"),                    NULL,        NULL,         NULL },
+   { (PCTSTR)(SIZE_T) GENERIC_READ,               TEXT("GENERIC_READ"),                       TEXT("GR"),  NULL,         NULL },
+   { (PCTSTR)(SIZE_T) GENERIC_WRITE,              TEXT("GENERIC_WRITE"),                      TEXT("GW"),  NULL,         NULL },
+   { (PCTSTR)(SIZE_T) GENERIC_EXECUTE,            TEXT("GENERIC_EXECUTE"),                    TEXT("GE"),  NULL,         NULL },
+   { (PCTSTR)(SIZE_T) GENERIC_ALL,                TEXT("GENERIC_ALL"),                        TEXT("GA"),  NULL,         NULL },
+   { (PCTSTR)(SIZE_T) ACCESS_SYSTEM_SECURITY,     TEXT("ACCESS_SYSTEM_SECURITY"),             TEXT("AS"),  NULL,         NULL },
    // Standard access rights
    { (PCTSTR) DELETE,                             TEXT("DELETE"),                             TEXT("SD"),  NULL,         NULL },
    { (PCTSTR) READ_CONTROL,                       TEXT("READ_CONTROL"),                       TEXT("SD"),  NULL,         NULL },
@@ -189,7 +189,7 @@ static int parse_single_access_right(PTSTR swzDesiredAccess, PDWORD pdwDesiredAc
    {
       if (_tcsicmp(pAccessRights[i][1], swzDesiredAccess) == 0)
       {
-         *pdwDesiredAccess = (DWORD)pAccessRights[i][0];
+         *pdwDesiredAccess = (DWORD)(SIZE_T)pAccessRights[i][0];
          return 0;
       }
    }

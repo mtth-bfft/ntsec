@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <shlwapi.h>
 #include <tlhelp32.h>
+#include <psapi.h>
 #include "utils.h"
 #include "process.h"
 
@@ -12,7 +13,7 @@ int find_process_by_name(PCTSTR swzName, DWORD *pdwPID)
    HANDLE hSnapshot = INVALID_HANDLE_VALUE;
    PROCESSENTRY32 procEntry = { 0 };
    DWORD dwPID = 0;
-   DWORD dwPatternLen = _tcslen(swzName) + 3;
+   DWORD dwPatternLen = (DWORD)_tcslen(swzName) + 3;
    PTSTR swzPattern = safe_alloc(dwPatternLen * sizeof(WCHAR));
    if (swzName[0] != TEXT('*'))
       _tcscat_s(swzPattern, dwPatternLen, TEXT("*"));
@@ -138,3 +139,294 @@ cleanup:
    return res;
 }
 
+int list_modules(HANDLE hProcess, HANDLE hSnapshot, PMODULEENTRY32 *ppList, PSIZE_T pdwCount)
+{
+   int res = 0;
+   MODULEENTRY32 modEntry = { 0 };
+   PMODULEENTRY32 pList = NULL;
+   SIZE_T dwCount = 0;
+
+   if (ppList == NULL || *ppList != NULL || pdwCount == NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   modEntry.dwSize = sizeof(modEntry);
+   if (!Module32First(hSnapshot, &modEntry))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: Module32First() failed on process %u with code %u\n"), GetProcessId(hProcess), res);
+      goto cleanup;
+   }
+
+   do
+   {
+      pList = safe_realloc(pList, (dwCount + 1) * sizeof(modEntry));
+      memcpy(&(pList[dwCount]), &modEntry, sizeof(modEntry));
+      dwCount++;
+   }
+   while (Module32Next(hSnapshot, &modEntry));
+
+   if (GetLastError() != ERROR_NO_MORE_FILES)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: Module32Next() failed on process %u with code %u\n"), GetProcessId(hProcess), res);
+   }
+
+   *ppList = pList;
+   *pdwCount = dwCount;
+
+cleanup:
+   if (res != 0 && pList != NULL)
+      safe_free(pList);
+   return res;
+}
+
+PVOID round_down_to_allocated_block(PVOID pIn)
+{
+   static SYSTEM_INFO sysInfo = { 0 };
+
+   if (sysInfo.dwPageSize == 0)
+      GetSystemInfo(&sysInfo);
+
+   return (PVOID)(((SIZE_T)pIn) & ~(((SIZE_T)sysInfo.dwAllocationGranularity) - 1));
+}
+
+int list_heaps(HANDLE hProcess, HANDLE hSnapshot, PVOID **ppList, PSIZE_T pdwCount)
+{
+   int res = 0;
+   HEAPLIST32 heapList = { 0 };
+   HEAPENTRY32 heapEntry = { 0 };
+   PVOID *pList = NULL;
+   SIZE_T dwCount = 0;
+
+   if (ppList == NULL || *ppList != NULL || pdwCount == NULL)
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   *pdwCount = 0;
+   heapList.dwSize = sizeof(heapList);
+   if (!Heap32ListFirst(hSnapshot, &heapList))
+   {
+      if (GetLastError() == ERROR_NO_MORE_FILES) // process with no heap
+         goto cleanup;
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: Heap32ListFirst() failed on process %u with code %u\n"), GetProcessId(hProcess), res);
+      goto cleanup;
+   }
+
+   do
+   {
+      //printf("Heap Found -- id = %llu\n", heapList.th32HeapID);
+      heapEntry.dwSize = sizeof(heapEntry);
+      if (!Heap32First(&heapEntry, heapList.th32ProcessID, heapList.th32HeapID))
+      {
+         if (GetLastError() == ERROR_NO_MORE_FILES) // empty heap
+            continue;
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Warning: Heap32First() failed on process %u with code %u\n"), GetProcessId(hProcess), res);
+         goto cleanup;
+      }
+      do
+      {
+         BOOL bKnownBlock = FALSE;
+         PVOID pBlockBase = round_down_to_allocated_block((PVOID)heapEntry.dwAddress);
+         /*printf("%p\n", (PVOID)heapEntry.dwAddress);
+         if (heapEntry.dwAddress >= 0x1DC2A530000 && heapEntry.dwAddress < 0x1DC2A540000)
+         {
+            printf("------ FOUND: %p / %p\n", (PVOID)heapEntry.dwAddress, pBlockBase);
+            return 42;
+         }*/
+         for (SSIZE_T i = dwCount - 1; i >= 0; i--)
+         {
+            if (pList[i] == pBlockBase)
+            {
+               bKnownBlock = TRUE;
+               break;
+            }
+         }
+         if (!bKnownBlock)
+         {
+            dwCount++;
+            pList = safe_realloc(pList, dwCount * sizeof(PVOID));
+            pList[dwCount - 1] = pBlockBase;
+         }
+         heapEntry.dwSize = sizeof(heapEntry);
+      }
+      while (Heap32Next(&heapEntry));
+
+      if (GetLastError() != ERROR_NO_MORE_FILES)
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Warning: Heap32Next() failed on process %u with code %u\n"), GetProcessId(hProcess), res);
+      }
+
+      heapList.dwSize = sizeof(heapList);
+   }
+   while (Heap32ListNext(hSnapshot, &heapList));
+
+   if (GetLastError() != ERROR_NO_MORE_FILES)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: Heap32Next() failed on process %u with code %u\n"), GetProcessId(hProcess), res);
+   }
+
+   *ppList = pList;
+   *pdwCount = dwCount;
+
+   printf(" Heap blocks: ");
+   for (SIZE_T i = 0; i < dwCount; i++)
+   {
+      printf(" %p", pList[i]);
+   }
+   printf("\n");
+
+cleanup:
+   if (res != 0 && pList != NULL)
+      safe_free(pList);
+   return res;
+}
+
+int list_memmap(HANDLE hProcess)
+{
+   int res = 0;
+   SYSTEM_INFO sysInfo = { 0 };
+   HANDLE hSnapshot = INVALID_HANDLE_VALUE;
+   MEMORY_BASIC_INFORMATION memInfo = { 0 };
+   PMODULEENTRY32 pListModules = NULL;
+   SIZE_T dwCountModules = 0;
+   PVOID *pListHeaps = NULL;
+   SIZE_T dwCountHeaps = 0;
+   PVOID pLastDisplayedBase = (PVOID)(-1);
+
+   GetSystemInfo(&sysInfo);
+
+   hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPHEAPLIST, GetProcessId(hProcess));
+   if (hSnapshot == INVALID_HANDLE_VALUE)
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: CreateToolhelp32Snapshot() failed on process %u with code %u\n"), GetProcessId(hProcess), GetLastError());
+   }
+   else
+   {
+      list_modules(hProcess, hSnapshot, &pListModules, &dwCountModules);
+      list_heaps(hProcess, hSnapshot, &pListHeaps, &dwCountHeaps);
+   }
+
+   for (PBYTE pQuery = NULL; ; pQuery = ((PBYTE)memInfo.BaseAddress) + memInfo.RegionSize)
+   {
+      if (VirtualQueryEx(hProcess, pQuery, &memInfo, sizeof(memInfo)) == 0)
+      {
+         if (GetLastError() == ERROR_INVALID_PARAMETER) // "error" used when pQuery is higher than the highest addressable byte
+            break;
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Warning: querying memory layout at address %p failed with code %u\n"), pQuery, res);
+         goto cleanup;
+      }
+
+      if (memInfo.State != MEM_COMMIT) // we're only interested in memory actually used
+         continue;
+
+      if (pLastDisplayedBase != memInfo.AllocationBase)
+      {
+         printf("%08p -- ", memInfo.AllocationBase);
+         pLastDisplayedBase = memInfo.AllocationBase;
+      }
+      else
+      {
+         printf("                 `- ");
+      }
+      printf("%08p", memInfo.BaseAddress);
+      printf(" | %8zx bytes | ", memInfo.RegionSize);
+
+      switch (memInfo.Protect & (0x100 - 1))
+      {
+      case PAGE_NOACCESS:
+         printf("---");
+         break;
+      case PAGE_READONLY:
+         printf("R--");
+         break;
+      case PAGE_READWRITE:
+      case PAGE_WRITECOPY:
+         printf("RW-");
+         break;
+      case PAGE_EXECUTE:
+         printf("--X");
+         break;
+      case PAGE_EXECUTE_READ:
+         printf("R-X");
+         break;
+      case PAGE_EXECUTE_READWRITE:
+      case PAGE_EXECUTE_WRITECOPY:
+         printf("RWX");
+         break;
+      default:
+         printf("%03X", memInfo.Protect);
+      }
+      printf("%s", memInfo.Protect & PAGE_GUARD ? "G" : "-");
+      printf(" | Originally ");
+      switch (memInfo.AllocationProtect & (0x100 - 1))
+      {
+      case PAGE_NOACCESS:
+         printf("---");
+         break;
+      case PAGE_READONLY:
+         printf("R--");
+         break;
+      case PAGE_READWRITE:
+      case PAGE_WRITECOPY:
+         printf("RW-");
+         break;
+      case PAGE_EXECUTE:
+         printf("--X");
+         break;
+      case PAGE_EXECUTE_READ:
+         printf("R-X");
+         break;
+      case PAGE_EXECUTE_READWRITE:
+      case PAGE_EXECUTE_WRITECOPY:
+         printf("RWX");
+         break;
+      default:
+         printf("%03X", memInfo.AllocationProtect);
+      }
+      printf("%s | ", memInfo.AllocationProtect & PAGE_GUARD ? "G" : "-");
+
+      BOOL bFound = FALSE;
+      for (SIZE_T i = 0; i < dwCountModules; i++)
+      {
+         if (memInfo.AllocationBase == pListModules[i].modBaseAddr)
+         {
+            printf("Module %ws", pListModules[i].szExePath);
+            bFound = TRUE;
+            break;
+         }
+      }
+
+      WCHAR swzMappedPath[MAX_PATH] = { 0 };
+      if (!bFound && GetMappedFileNameW(hProcess, memInfo.BaseAddress, swzMappedPath, MAX_PATH) != 0)
+      {
+         printf("Mapped file %ws", swzMappedPath);
+      }
+      else if (!bFound)
+      {
+         for (SIZE_T i = 0; i < dwCountHeaps; i++)
+         {
+            if (memInfo.AllocationBase == pListHeaps[i])
+            {
+               printf("[heap]");
+               break;
+            }
+         }
+      }
+      printf("\n");
+   }
+
+cleanup:
+   if (hSnapshot != INVALID_HANDLE_VALUE)
+      CloseHandle(hSnapshot);
+   return res;
+}
