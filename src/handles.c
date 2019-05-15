@@ -1,7 +1,7 @@
 #include <Windows.h>
-#include "handles.h"
-#include "nt.h"
-#include "utils.h"
+#include "include\handles.h"
+#include "include\nt.h"
+#include "include\utils.h"
 
 int get_handle_granted_rights(HANDLE hHandle, PDWORD pdwGrantedRights)
 {

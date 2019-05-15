@@ -2,11 +2,11 @@
 #include <tchar.h>
 #include <stdio.h>
 #include <fltUser.h> // for FilterCommunicationPort objects
-#include "process.h"
-#include "registry.h"
-#include "token.h"
-#include "utils.h"
-#include "nt.h"
+#include "include\process.h"
+#include "include\registry.h"
+#include "include\token.h"
+#include "include\utils.h"
+#include "include\nt.h"
 
 typedef struct {
    PCTSTR swzNTPath;

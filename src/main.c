@@ -4,18 +4,18 @@
 #include <stdio.h>
 #include <sddl.h>
 #include <conio.h>
-#include "main.h"
-#include "process.h"
-#include "registry.h"
-#include "token.h"
-#include "nt.h"
-#include "securitydescriptor.h"
-#include "accessright.h"
-#include "mitigations.h"
-#include "files.h"
-#include "process.h"
-#include "services.h"
-#include "utils.h"
+#include "include\main.h"
+#include "include\process.h"
+#include "include\registry.h"
+#include "include\token.h"
+#include "include\nt.h"
+#include "include\securitydescriptor.h"
+#include "include\accessright.h"
+#include "include\mitigations.h"
+#include "include\files.h"
+#include "include\process.h"
+#include "include\services.h"
+#include "include\utils.h"
 
 #define MAX_COMMAND_LEN 1000
 #define MAX_NT_PATH_LEN 1000

@@ -2,10 +2,10 @@
 #include <tchar.h>
 #include <sddl.h>
 #include <stdio.h>
-#include "token.h"
-#include "securitydescriptor.h"
-#include "nt.h"
-#include "utils.h"
+#include "include\token.h"
+#include "include\securitydescriptor.h"
+#include "include\nt.h"
+#include "include\utils.h"
 
 #define MAX_PRIVILEGE_NAME_LEN 45
 

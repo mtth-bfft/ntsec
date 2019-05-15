@@ -1,10 +1,10 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
-#include "files.h"
-#include "nt.h"
-#include "token.h"
-#include "utils.h"
+#include "include\files.h"
+#include "include\nt.h"
+#include "include\token.h"
+#include "include\utils.h"
 
 static int nt_file_callback(PCTSTR swzFileNTPath, PVOID pData)
 {

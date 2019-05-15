@@ -1,10 +1,10 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
-#include "registry.h"
-#include "nt.h"
-#include "token.h"
-#include "utils.h"
+#include "include\registry.h"
+#include "include\nt.h"
+#include "include\token.h"
+#include "include\utils.h"
 
 int open_regkey_by_name(PCTSTR swzRegKey, REGSAM ulDesiredAccess, PHKEY phOut)
 {

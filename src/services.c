@@ -1,8 +1,8 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
-#include "services.h"
-#include "utils.h"
+#include "include\services.h"
+#include "include\utils.h"
 
 int open_service(PTSTR swzName, DWORD dwRightsRequired, SC_HANDLE *phOut)
 {

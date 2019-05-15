@@ -3,9 +3,9 @@
 #include <aclapi.h>
 #include <sddl.h>
 #include <stdio.h>
-#include "securitydescriptor.h"
-#include "token.h"
-#include "utils.h"
+#include "include\securitydescriptor.h"
+#include "include\token.h"
+#include "include\utils.h"
 
 int print_sid(FILE *out, PSID pSID)
 {

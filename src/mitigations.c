@@ -1,7 +1,7 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
-#include "mitigations.h"
+#include "include\mitigations.h"
 
 int list_process_mitigations(HANDLE hProcess)
 {

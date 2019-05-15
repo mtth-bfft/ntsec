@@ -4,8 +4,8 @@
 #include <shlwapi.h>
 #include <tlhelp32.h>
 #include <psapi.h>
-#include "utils.h"
-#include "process.h"
+#include "include\utils.h"
+#include "include\process.h"
 
 int find_process_by_name(PCTSTR swzName, DWORD *pdwPID)
 {
