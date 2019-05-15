@@ -337,7 +337,7 @@ int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
    }
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   status = NtCreateFile(phOut, dwRightsRequired, &objAttr, &ioStatus, &liInitialSize, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF, 0, NULL, 0);
+   status = NtCreateFile(phOut, dwRightsRequired, &objAttr, &ioStatus, &liInitialSize, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN_IF, FILE_OPEN_REPARSE_POINT, NULL, 0);
    if (!NT_SUCCESS(status))
       res = status;
 

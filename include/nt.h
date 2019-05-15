@@ -6,6 +6,7 @@
 // These structures and functions are mostly undocumented and can change from one release to the next
 
 #define FILE_OPEN_IF 0x00000003
+#define FILE_OPEN_REPARSE_POINT 0x00200000
 #define DIRECTORY_QUERY 0x0001
 #define DIRECTORY_TRAVERSE 0x0002
 #define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
