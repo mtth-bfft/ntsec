@@ -36,22 +36,67 @@
     <ClCompile Include="src\accessright.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\files.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\securitydescriptor.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\mitigations.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\services.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\handles.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\rpc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\alpc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\targets.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\thread.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\file.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\directory.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\filterconnectionport.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\symboliclink.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\mutant.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\event.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\keyedevent.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\section.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\semaphore.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\timer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\session.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\job.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\memorypartition.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\service.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -74,16 +119,10 @@
     <ClInclude Include="include\accessright.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\files.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="include\securitydescriptor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\mitigations.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="include\services.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\handles.h">
@@ -93,6 +132,57 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\rpc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\alpc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\targets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\thread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\file.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\directory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\filterconnectionport.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\symboliclink.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\mutant.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\event.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\keyedevent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\section.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\semaphore.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\timer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\session.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\job.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\memorypartition.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\service.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

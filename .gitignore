@@ -3,3 +3,4 @@
 /x64/
 /Win32/
 /*.vcxproj.user
+*.swp

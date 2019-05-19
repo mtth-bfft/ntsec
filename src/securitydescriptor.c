@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "include\securitydescriptor.h"
 #include "include\token.h"
+#include "include\targets.h"
 #include "include\utils.h"
 
 int print_sid(FILE *out, PSID pSID)
@@ -56,7 +57,7 @@ cleanup:
    return res;
 }
 
-int print_sddl(PSECURITY_DESCRIPTOR pSD, DWORD dwSDFlags)
+int print_sddl(FILE *out, PSECURITY_DESCRIPTOR pSD, DWORD dwSDFlags)
 {
    int res = 0;
    PTSTR swzSDDL = NULL;
@@ -67,7 +68,7 @@ int print_sddl(PSECURITY_DESCRIPTOR pSD, DWORD dwSDFlags)
       _ftprintf(stderr, TEXT(" [!] Error: unable to convert security descriptor to string (error %u)\n"), res);
       goto cleanup;
    }
-   _tprintf(TEXT("%s\n"), swzSDDL);
+   _ftprintf(out, TEXT("%s\n"), swzSDDL);
 
 cleanup:
    if (swzSDDL != NULL)
@@ -75,13 +76,61 @@ cleanup:
    return res;
 }
 
-int print_sd(PSECURITY_DESCRIPTOR pSD, DWORD dwSDFlags)
+int print_sd(FILE *out, PSECURITY_DESCRIPTOR pSD, DWORD dwSDFlags)
 {
-   // TODO: actual description
-   return print_sddl(pSD, dwSDFlags);
+   UNREFERENCED_PARAMETER(out);
+   UNREFERENCED_PARAMETER(pSD);
+   UNREFERENCED_PARAMETER(dwSDFlags);
+   _ftprintf(stderr, TEXT(" [!] Security descriptor printing: WIP\n"));
+   return ERROR_NOT_SUPPORTED;
 }
 
-int print_target_sd(target_t targetType, PCTSTR swzTarget, BOOL bVerbose)
+int print_target_sddl(FILE *out, target_t targetType, PCTSTR swzTarget)
+{
+   int res = 0;
+   DWORD dwRes = 0;
+   HANDLE hTarget = INVALID_HANDLE_VALUE;
+   DWORD dwOpenRights = READ_CONTROL;
+   DWORD dwSDFlags = ATTRIBUTE_SECURITY_INFORMATION | ATTRIBUTE_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION;
+   PSECURITY_DESCRIPTOR pSD = NULL;
+
+   // Dump SACL information, only possible when privileged enough
+   if (has_privilege_caller(SE_SECURITY_NAME))
+   {
+      res = set_privilege_caller(SE_SECURITY_NAME, SE_PRIVILEGE_ENABLED);
+      if (res == 0)
+      {
+         dwOpenRights |= ACCESS_SYSTEM_SECURITY;
+         dwSDFlags |= SACL_SECURITY_INFORMATION;
+      }
+      else
+      {
+         _ftprintf(stderr, TEXT(" [!] Warning: enabling SeSecurityPrivilege failed with code %u, SDDL will be incomplete\n"), res);
+         res = 0;
+      }
+   }
+
+   res = open_target_by_typeid(swzTarget, targetType, dwOpenRights, &hTarget);
+   if (res != 0)
+      goto cleanup;
+
+   dwRes = GetSecurityInfo(hTarget, SE_KERNEL_OBJECT, dwSDFlags, NULL, NULL, NULL, NULL, &pSD);
+   if (dwRes != ERROR_SUCCESS)
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: unable to query security descriptor (error %u)\n"), res);
+      goto cleanup;
+   }
+
+   res = print_sddl(out, pSD, dwSDFlags);
+
+cleanup:
+   if (pSD != NULL)
+      LocalFree(pSD);
+   return res;
+}
+
+int print_target_sd(FILE *out, target_t targetType, PCTSTR swzTarget)
 {
    int res = 0;
    DWORD dwRes = 0;
@@ -98,7 +147,7 @@ int print_target_sd(target_t targetType, PCTSTR swzTarget, BOOL bVerbose)
       set_privilege_caller(SE_SECURITY_NAME, TRUE);
    }
 
-   res = open_target(swzTarget, targetType, dwOpenRights, &hTarget);
+   res = open_target_by_typeid(swzTarget, targetType, dwOpenRights, &hTarget);
    if (res != 0)
       goto cleanup;
 
@@ -106,14 +155,11 @@ int print_target_sd(target_t targetType, PCTSTR swzTarget, BOOL bVerbose)
    if (dwRes != ERROR_SUCCESS)
    {
       res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Error: unable to query security descriptor (error %u)\n"), res);
+      _ftprintf(stderr, TEXT(" [!] Warning: unable to query security descriptor (error %u)\n"), res);
       goto cleanup;
    }
 
-   if (bVerbose)
-      res = print_sd(pSD, dwSDFlags);
-   else
-      res = print_sddl(pSD, dwSDFlags);
+   res = print_sd(out, pSD, dwSDFlags);
 
 cleanup:
    if (pSD != NULL)

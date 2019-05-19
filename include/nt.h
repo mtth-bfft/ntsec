@@ -1,12 +1,16 @@
 #pragma once
 #include <Windows.h>
 #include <subauth.h>
+#include "include\targets.h"
 
 // This file handles the NT-specific-and-internal aspects
 // These structures and functions are mostly undocumented and can change from one release to the next
 
 #define FILE_OPEN_IF 0x00000003
 #define FILE_OPEN_REPARSE_POINT 0x00200000
+
+#define OBJ_CASE_INSENSITIVE    0x00000040L
+
 #define DIRECTORY_QUERY 0x0001
 #define DIRECTORY_TRAVERSE 0x0002
 #define STATUS_INFO_LENGTH_MISMATCH 0xC0000004
@@ -14,6 +18,16 @@
 #define STATUS_BUFFER_TOO_SMALL 0xC0000023
 #define STATUS_BUFFER_OVERFLOW 0x80000005
 #define STATUS_NO_MORE_FILES 0x80000006
+#define STATUS_NO_MORE_ENTRIES  0x8000001AL
+
+#define InitializeObjectAttributes( p, n, a, r, s ) { \
+   (p)->Length = sizeof( OBJECT_ATTRIBUTES );          \
+   (p)->RootDirectory = r;                             \
+   (p)->Attributes = a;                                \
+   (p)->ObjectName = n;                                \
+   (p)->SecurityDescriptor = s;                        \
+   (p)->SecurityQualityOfService = NULL;               \
+   }
 
 typedef enum _SYSTEM_INFORMATION_CLASS {
    SystemHandleInformation = 0x10,
@@ -331,24 +345,6 @@ typedef NTSTATUS(WINAPI *PNtAlpcConnectPort)(
 
 // Our custom types
 
-typedef enum {
-   TARGET_NONE = 0,
-   TARGET_PROCESS,
-   TARGET_THREAD,
-   TARGET_PRIMARY_TOKEN,
-   TARGET_IMPERSONATION_TOKEN,
-   TARGET_REGKEY,
-   TARGET_FILE,
-   TARGET_NT_OBJECT,
-} target_t;
-
-typedef enum {
-   NT_UNKNOWN = 0,
-   NT_DIRECTORY,
-} nt_object_type_t;
-
-typedef int(*nt_object_open_t)(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-typedef int(*nt_object_enum_callback_t)(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pData);
 typedef int(*nt_path_enum_callback_t)(PCTSTR swzNtPath, PVOID pData);
 
 extern PNtOpenDirectoryObject NtOpenDirectoryObject;
@@ -358,37 +354,18 @@ extern PNtQueryDirectoryFile NtQueryDirectoryFile;
 extern PNtOpenSymbolicLinkObject NtOpenSymbolicLinkObject;
 extern PNtOpenMutant NtOpenMutant;
 extern PNtOpenEvent NtOpenEvent;
+extern PNtOpenKeyedEvent NtOpenKeyedEvent;
 extern PNtOpenSection NtOpenSection;
 extern PNtOpenSemaphore NtOpenSemaphore;
 extern PNtOpenTimer NtOpenTimer;
 extern PNtOpenSession NtOpenSession;
 extern PNtOpenJobObject NtOpenJobObject;
+extern PNtOpenPartition NtOpenPartition;
 extern PNtOpenKeyEx NtOpenKeyEx;
 extern PNtEnumerateKey NtEnumerateKey;
 extern PNtAlpcConnectPort NtAlpcConnectPort;
 extern PNtQuerySystemInformation NtQuerySystemInformation;
 
 int resolve_imports();
-int open_target(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_symbolic_link_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_mutant_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_event_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_keyedevent_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_section_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_semaphore_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_timer_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_session_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_job_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_partition_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_key_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int open_nt_unsupported_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut);
-int foreach_nt_object(PCTSTR swzNTPath, nt_object_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
-int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
-int foreach_nt_key(HANDLE hKey, nt_path_enum_callback_t pCallback, PVOID pData, BOOL bRecurse);
-int enumerate_nt_objects_with(DWORD dwDesiredAccess);
 int get_handle_granted_rights(HANDLE hHandle, PDWORD pdwGrantedRights);
+int get_nt_object_type(PCTSTR swzNTPath, target_t *pType);

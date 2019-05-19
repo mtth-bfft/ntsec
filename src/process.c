@@ -7,6 +7,95 @@
 #include "include\utils.h"
 #include "include\process.h"
 
+int create_process_with_token(HANDLE hToken, PTSTR swzCommandLine, PHANDLE phNewProcess)
+{
+   int res = 0;
+   HANDLE hNewToken = INVALID_HANDLE_VALUE;
+   STARTUPINFOEX startupInfo = { 0 };
+   PROCESS_INFORMATION procInfo = { 0 };
+   ZeroMemory(&startupInfo, sizeof(startupInfo));
+   ZeroMemory(&procInfo, sizeof(procInfo));
+   startupInfo.StartupInfo.cb = sizeof(startupInfo);
+
+   if (hToken == NULL || hToken == INVALID_HANDLE_VALUE || swzCommandLine == NULL || phNewProcess == NULL || (*phNewProcess != NULL && *phNewProcess != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   if (!DuplicateTokenEx(hToken, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_IMPERSONATE, NULL, SecurityImpersonation, TokenPrimary, &hNewToken))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: DuplicateTokenEx() failed with code %u\n"), res);
+      goto cleanup;
+   }
+
+   if (!CreateProcessAsUser(hToken, NULL, swzCommandLine, NULL, NULL, FALSE, CREATE_NEW_CONSOLE | CREATE_BREAKAWAY_FROM_JOB, NULL, NULL, (LPSTARTUPINFO)&startupInfo, &procInfo))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: CreateProcessAsUser() failed with code %u\n"), res);
+      goto cleanup;
+   }
+
+   CloseHandle(procInfo.hThread);
+   *phNewProcess = procInfo.hProcess;
+
+cleanup:
+   if (hNewToken != INVALID_HANDLE_VALUE)
+      CloseHandle(hNewToken);
+   return res;
+}
+
+int create_reparented_process(HANDLE hParentProcess, PTSTR swzCommandLine, PHANDLE phNewProcess)
+{
+   int res = 0;
+   STARTUPINFOEX startupInfo = { 0 };
+   PROCESS_INFORMATION procInfo = { 0 };
+   SIZE_T dwAttrListBytes = 0;
+   ZeroMemory(&startupInfo, sizeof(startupInfo));
+   ZeroMemory(&procInfo, sizeof(procInfo));
+   startupInfo.StartupInfo.cb = sizeof(startupInfo);
+
+   if (hParentProcess == NULL || hParentProcess == INVALID_HANDLE_VALUE || swzCommandLine == NULL || phNewProcess == NULL || (*phNewProcess != NULL && *phNewProcess != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, &dwAttrListBytes);
+   startupInfo.lpAttributeList = safe_alloc(dwAttrListBytes);
+   if (!InitializeProcThreadAttributeList(startupInfo.lpAttributeList, 1, 0, &dwAttrListBytes))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: InitializeProcThreadAttributeList() failed with code %u\n"), res);
+      goto cleanup;
+   }
+   if (!UpdateProcThreadAttribute(startupInfo.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &hParentProcess, sizeof(hParentProcess), NULL, NULL))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: UpdateProcThreadAttribute(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS) failed with code %u\n"), res);
+      goto cleanup;
+   }
+
+   if (!CreateProcess(NULL, swzCommandLine, NULL, NULL, FALSE, CREATE_NEW_CONSOLE | EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, (LPSTARTUPINFO)&startupInfo, &procInfo))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Error: CreateProcess() failed with code %u\n"), res);
+      goto cleanup;
+   }
+
+   CloseHandle(procInfo.hThread);
+   *phNewProcess = procInfo.hProcess;
+
+cleanup:
+   if (startupInfo.lpAttributeList != NULL)
+   {
+      DeleteProcThreadAttributeList(startupInfo.lpAttributeList);
+      safe_free(startupInfo.lpAttributeList);
+   }
+   return res;
+}
+
 int find_process_by_name(PCTSTR swzName, DWORD *pdwPID)
 {
    int res = 0;
@@ -71,7 +160,36 @@ cleanup:
    return res;
 }
 
-int open_process(DWORD dwPID, DWORD dwRightsRequired, PHANDLE phOut)
+int open_nt_process_object(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOut)
+{
+   int res = 0;
+   long lID = 0;
+   DWORD dwPID = 0;
+
+   errno = 0;
+   lID = _tstol(swzTarget);
+
+   if (lID > 0 && errno == 0)
+   {
+      dwPID = (DWORD)lID;
+   }
+   else if (_tcsicmp(swzTarget, TEXT("current")) == 0)
+   {
+      dwPID = GetCurrentProcessId();
+   }
+   else
+   {
+      res = find_process_by_name(swzTarget, &dwPID);
+      if (res != 0)
+         goto cleanup;
+   }
+   res = open_nt_process_by_pid(dwPID, dwRightsRequired, phOut);
+
+cleanup:
+   return res;
+}
+
+int open_nt_process_by_pid(DWORD dwPID, DWORD dwRightsRequired, PHANDLE phOut)
 {
    int res = 0;
    HANDLE hProc = NULL;
@@ -120,7 +238,7 @@ int enumerate_processes_with(DWORD dwDesiredAccess)
       if (procEntry.th32ProcessID == 0)
          continue; // skip the idle pseudo-process
 
-      res = open_process(procEntry.th32ProcessID, dwDesiredAccess, &hProc);
+      res = open_nt_process_by_pid(procEntry.th32ProcessID, dwDesiredAccess, &hProc);
       if (res == 0)
       {
          _tprintf(TEXT(" [.] Process %u (%s)\n"), procEntry.th32ProcessID, procEntry.szExeFile);

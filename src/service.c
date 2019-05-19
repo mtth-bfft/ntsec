@@ -1,10 +1,10 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <stdio.h>
-#include "include\services.h"
+#include "include\service.h"
 #include "include\utils.h"
 
-int open_service(PTSTR swzName, DWORD dwRightsRequired, SC_HANDLE *phOut)
+int open_service(PCTSTR swzName, DWORD dwRightsRequired, SC_HANDLE *phOut)
 {
    int res = 0;
    SC_HANDLE hSvcMgr = NULL;

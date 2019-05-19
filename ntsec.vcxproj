@@ -155,31 +155,61 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\accessright.c" />
-    <ClCompile Include="src\files.c" />
+    <ClCompile Include="src\alpc.c" />
+    <ClCompile Include="src\directory.c" />
+    <ClCompile Include="src\event.c" />
+    <ClCompile Include="src\file.c" />
+    <ClCompile Include="src\filterconnectionport.c" />
     <ClCompile Include="src\handles.c" />
+    <ClCompile Include="src\job.c" />
+    <ClCompile Include="src\keyedevent.c" />
     <ClCompile Include="src\main.c" />
+    <ClCompile Include="src\memorypartition.c" />
     <ClCompile Include="src\mitigations.c" />
+    <ClCompile Include="src\mutant.c" />
     <ClCompile Include="src\nt.c" />
     <ClCompile Include="src\process.c" />
     <ClCompile Include="src\registry.c" />
     <ClCompile Include="src\rpc.c" />
+    <ClCompile Include="src\section.c" />
     <ClCompile Include="src\securitydescriptor.c" />
-    <ClCompile Include="src\services.c" />
+    <ClCompile Include="src\semaphore.c" />
+    <ClCompile Include="src\service.c" />
+    <ClCompile Include="src\session.c" />
+    <ClCompile Include="src\symboliclink.c" />
+    <ClCompile Include="src\targets.c" />
+    <ClCompile Include="src\thread.c" />
+    <ClCompile Include="src\timer.c" />
     <ClCompile Include="src\token.c" />
     <ClCompile Include="src\utils.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\accessright.h" />
-    <ClInclude Include="include\files.h" />
+    <ClInclude Include="include\alpc.h" />
+    <ClInclude Include="include\directory.h" />
+    <ClInclude Include="include\event.h" />
+    <ClInclude Include="include\file.h" />
+    <ClInclude Include="include\filterconnectionport.h" />
     <ClInclude Include="include\handles.h" />
+    <ClInclude Include="include\job.h" />
+    <ClInclude Include="include\keyedevent.h" />
     <ClInclude Include="include\main.h" />
+    <ClInclude Include="include\memorypartition.h" />
     <ClInclude Include="include\mitigations.h" />
+    <ClInclude Include="include\mutant.h" />
     <ClInclude Include="include\nt.h" />
     <ClInclude Include="include\process.h" />
     <ClInclude Include="include\registry.h" />
     <ClInclude Include="include\rpc.h" />
+    <ClInclude Include="include\section.h" />
     <ClInclude Include="include\securitydescriptor.h" />
-    <ClInclude Include="include\services.h" />
+    <ClInclude Include="include\semaphore.h" />
+    <ClInclude Include="include\service.h" />
+    <ClInclude Include="include\session.h" />
+    <ClInclude Include="include\symboliclink.h" />
+    <ClInclude Include="include\targets.h" />
+    <ClInclude Include="include\thread.h" />
+    <ClInclude Include="include\timer.h" />
     <ClInclude Include="include\token.h" />
     <ClInclude Include="include\utils.h" />
   </ItemGroup>

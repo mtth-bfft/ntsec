@@ -5,6 +5,7 @@
 #include "include\token.h"
 #include "include\securitydescriptor.h"
 #include "include\nt.h"
+#include "include\targets.h"
 #include "include\utils.h"
 
 #define MAX_PRIVILEGE_NAME_LEN 45
@@ -169,11 +170,17 @@ BOOL has_privilege(HANDLE hToken, PCTSTR swzPrivName)
 
    res = lookup_privilege(swzPrivName, &luid);
    if (res != 0)
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: unresolved privilege name '%s'\n"), swzPrivName);
       return FALSE;
+   }
    
    res = get_token_info(hToken, TokenPrivileges, &pPrivs, NULL);
    if (res != 0)
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: querying token privileges failed with code %u\n"), res);
       return FALSE;
+   }
 
    for (DWORD i = 0; i < pPrivs->PrivilegeCount; i++)
    {
@@ -193,7 +200,8 @@ BOOL has_privilege_caller(PCTSTR swzPrivName)
    HANDLE hToken = INVALID_HANDLE_VALUE;
    BOOL bRes = FALSE;
 
-   if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE, &hToken) && !OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hToken))
+   if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, FALSE, &hToken) &&
+      !OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hToken))
    {
       if (GetLastError() == ERROR_NO_TOKEN)
       {
@@ -250,6 +258,74 @@ int get_token_info(HANDLE hToken, TOKEN_INFORMATION_CLASS infoClass, PVOID *ppRe
 cleanup:
    if (res != 0 && pResult != NULL)
       safe_free(pResult);
+   return res;
+}
+
+int open_nt_primary_token(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOut)
+{
+   int res = 0;
+   HANDLE hProcess = INVALID_HANDLE_VALUE;
+
+   if (swzTarget == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+   if (res != 0)
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: opening process %s to query its token failed with code %u\n"),
+         swzTarget, res);
+      goto cleanup;
+   }
+   if (!OpenProcessToken(hProcess, dwRightsRequired, phOut))
+   {
+      res = GetLastError();
+      _ftprintf(stderr, TEXT(" [!] Warning: opening process %u token failed with code %u\n"),
+         GetProcessId(hProcess), res);
+      goto cleanup;
+   }
+
+cleanup:
+   if (hProcess != INVALID_HANDLE_VALUE)
+      CloseHandle(hProcess);
+   return res;
+}
+
+int open_nt_impersonation_token(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOut)
+{
+   int res = 0;
+   HANDLE hThread = INVALID_HANDLE_VALUE;
+
+   if (swzTarget == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
+   {
+      res = ERROR_INVALID_PARAMETER;
+      goto cleanup;
+   }
+
+   res = open_target_by_typeid(swzTarget, TARGET_THREAD, THREAD_QUERY_INFORMATION, &hThread);
+   if (res != 0)
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: opening thread %s to query its token failed with code %u\n"),
+         swzTarget, res);
+      goto cleanup;
+   }
+   if (!OpenThreadToken(hThread, dwRightsRequired, TRUE, phOut))
+   {
+      res = GetLastError();
+      if (res == ERROR_NO_TOKEN)
+         _ftprintf(stderr, TEXT(" [!] Warning: thread %u is not impersonating, there is no token to open\n"),
+            GetThreadId(hThread));
+      else
+         _ftprintf(stderr, TEXT(" [!] Warning: opening thread %u token failed with code %u\n"),
+            GetThreadId(hThread), res);
+      goto cleanup;
+   }
+
+cleanup:
+   if (hThread != INVALID_HANDLE_VALUE)
+      CloseHandle(hThread);
    return res;
 }
 
@@ -486,7 +562,7 @@ int get_target_token(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequir
 
    if (targetType == TARGET_PRIMARY_TOKEN || targetType == TARGET_PROCESS)
    {
-      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hTarget);
+      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hTarget);
       if (res != 0)
          goto cleanup;
       if (!OpenProcessToken(hTarget, dwRightsRequired, phToken))
@@ -498,7 +574,7 @@ int get_target_token(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequir
    }
    else if (targetType == TARGET_IMPERSONATION_TOKEN || targetType == TARGET_THREAD)
    {
-      res = open_target(swzTarget, TARGET_THREAD, THREAD_QUERY_INFORMATION, &hTarget);
+      res = open_target_by_typeid(swzTarget, TARGET_THREAD, THREAD_QUERY_INFORMATION, &hTarget);
       if (res != 0)
          goto cleanup;
       if (!OpenThreadToken(hTarget, dwRightsRequired, TRUE, phToken))

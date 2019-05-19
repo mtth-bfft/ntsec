@@ -5,6 +5,7 @@
 #include <sddl.h>
 #include <conio.h>
 #include "include\main.h"
+#include "include\directory.h"
 #include "include\process.h"
 #include "include\registry.h"
 #include "include\token.h"
@@ -12,11 +13,13 @@
 #include "include\securitydescriptor.h"
 #include "include\accessright.h"
 #include "include\mitigations.h"
-#include "include\files.h"
+#include "include\file.h"
 #include "include\process.h"
-#include "include\services.h"
+#include "include\service.h"
 #include "include\rpc.h"
+#include "include\alpc.h"
 #include "include\utils.h"
+#include "include\targets.h"
 
 #define MAX_COMMAND_LEN 1000
 #define MAX_NT_PATH_LEN 1000
@@ -45,17 +48,30 @@ static void print_usage()
    _ftprintf(stderr, TEXT("                        service, regkey, job, event, mutex, semaphore, timer, mempartition\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Select a securable object:\n"));
-   _ftprintf(stderr, TEXT("   -p --process <pid>|<name>|current|caller   select the given process by .exe name or id\n"));
-   _ftprintf(stderr, TEXT("   -t --thread  <tid>|current                 select the given thread by id\n"));
-   _ftprintf(stderr, TEXT("   -r --regkey  <nt_path>|<win32_path>        select the given registry key by NT or Win32 path\n"));
-   _ftprintf(stderr, TEXT("   -f --file    <nt_path>|<win32_path>        select the given file object by NT or Win32 path\n"));
-   _ftprintf(stderr, TEXT("   -o --ntobj   <nt_path>                     select the given NT object (device, alpc port, etc.)\n"));
-   _ftprintf(stderr, TEXT("   -s --service <name>                        select the given service by short name\n"));
+   _ftprintf(stderr, TEXT("      --nt         <nt_path>                   any NT object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --alpc       <nt_path>                   ALPC connection port, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --directory  <nt_path>                   object directory, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --event      <nt_path>                   event object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("   -f --file       <nt_path>|<win32_path>      file or directory object, by NT or Win32 path\n"));
+   _ftprintf(stderr, TEXT("      --fltport    <nt_path>                   filter connection port object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --job        <nt_path>                   job object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --keyedevent <nt_path>                   keyed event object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --partition  <nt_path>                   memory partition object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --mutant     <nt_path>                   mutant object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("   -p --process    <pid>|<name>|current|caller process, by .exe name or id\n"));
+   _ftprintf(stderr, TEXT("   -r --regkey     <nt_path>|<win32_path>      registry key, by NT or Win32 path\n"));
+   _ftprintf(stderr, TEXT("      --section    <nt_path>                   section object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --semaphore  <nt_path>                   semaphore object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("   -s --service    <name>                      Windows service, by short name\n"));
+   _ftprintf(stderr, TEXT("      --session    <nt_path>                   session object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --symlink    <nt_path>                   symbolic link object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("   -t --thread     <tid>|current               thread, by id or 'current'\n"));
+   _ftprintf(stderr, TEXT("      --timer      <nt_path>                   timer object, by absolute NT path\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Generic operations for all types:\n"));
-   _ftprintf(stderr, TEXT("   --sddl [new_sddl]            display (or replace) the security descriptor, as a SDDL string\n"));
-   _ftprintf(stderr, TEXT("   --show-sd                    show the security descriptor as text\n"));
-   _ftprintf(stderr, TEXT("   --explain-sd                 show the security descriptor, describing each access right\n"));
+   _ftprintf(stderr, TEXT("      --sddl [new_sddl]         display (or replace) the security descriptor, as a SDDL string\n"));
+   _ftprintf(stderr, TEXT("      --show-sd                 show the security descriptor as text\n"));
+   _ftprintf(stderr, TEXT("      --explain-sd              show the security descriptor, describing each access right\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Operations on processes:\n"));
    _ftprintf(stderr, TEXT("   --open-token                 select the process' primary token\n"));
@@ -95,7 +111,7 @@ static void print_usage()
    _ftprintf(stderr, TEXT("   --resolve-sid <sid>|<name>   resolve a name to a SID, and vice versa\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Options:\n"));
-   _ftprintf(stderr, TEXT("   -i --interactive             drop to an interactive pseudo-shell\n"));
+   _ftprintf(stderr, TEXT("   -i --interactive             pop an interactive pseudo-shell\n"));
    _ftprintf(stderr, TEXT("   -y --yes                     don't prompt for consent, assume yes\n"));
    _ftprintf(stderr, TEXT("   -n --no                      don't prompt for consent, assume no\n"));
    _ftprintf(stderr, TEXT("   -v --verbose                 increase verbosity (can be repeated)\n"));
@@ -219,95 +235,285 @@ int process_cmdline(int argc, PCWSTR argv[])
       bAlwaysYes = TRUE;
       bAlwaysNo = FALSE;
    }
-   else if (_tcsicmp(TEXT("process"), argv[0]) == 0 || _tcsicmp(TEXT("p"), argv[0]) == 0)
+   /************************ Target selection, one per type ************************/
+   else if (_tcsicmp(TEXT("alpc"), argv[0]) == 0)
    {
       if (argc != 2)
       {
          res = 1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'process' requires a PID or image name\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'alpc' requires an absolute path to an ALPC port, or the name of a port in \\RPC Control\\\n"));
          print_usage();
          goto cleanup;
       }
       swzTarget = argv[1];
-      targetType = TARGET_PROCESS;
+      targetType = TARGET_ALPC_CONNECTION_PORT;
    }
-   else if (_tcsicmp(TEXT("thread"), argv[0]) == 0 || _tcsicmp(TEXT("t"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("directory"), argv[0]) == 0 || _tcsicmp(TEXT("dir"), argv[0]) == 0)
    {
       if (argc != 2)
       {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'thread' requires a TID\n"));
+         res = 1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'directory' requires an absolute path to a NT object directory\n"));
          print_usage();
          goto cleanup;
       }
       swzTarget = argv[1];
-      targetType = TARGET_THREAD;
+      targetType = TARGET_DIRECTORY_OBJECT;
    }
-   else if (_tcsicmp(TEXT("regkey"), argv[0]) == 0 || _tcsicmp(TEXT("r"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("event"), argv[0]) == 0)
    {
       if (argc != 2)
       {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'regkey' requires an absolute path\n"));
+         res = 1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'event' requires an absolute path to a NT event object\n"));
          print_usage();
          goto cleanup;
       }
       swzTarget = argv[1];
-      targetType = TARGET_REGKEY;
+      targetType = TARGET_EVENT;
    }
    else if (_tcsicmp(TEXT("file"), argv[0]) == 0 || _tcsicmp(TEXT("f"), argv[0]) == 0)
    {
       if (argc != 2)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'file' requires a Win32 or NT path\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'file' requires an absolute NT path to a file or directory\n"));
          print_usage();
          goto cleanup;
       }
       swzTarget = argv[1];
       targetType = TARGET_FILE;
    }
-   else if (_tcsicmp(TEXT("ntobj"), argv[0]) == 0 || _tcsicmp(TEXT("o"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("filterport"), argv[0]) == 0)
    {
       if (argc != 2)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'ntobj' requires an absolute NT path\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'filterport' requires an absolute NT path to a NT filter connection port\n"));
          print_usage();
          goto cleanup;
       }
       swzTarget = argv[1];
-      targetType = TARGET_NT_OBJECT;
+      targetType = TARGET_FILTER_CONNECTION_PORT;
    }
-   else if (_tcsicmp(TEXT("show-sddl"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("job"), argv[0]) == 0)
    {
-      res = print_target_sd(targetType, swzTarget, FALSE);
-      if (res != 0)
-         goto cleanup;
-   }
-   else if (_tcsicmp(TEXT("show-sd"), argv[0]) == 0)
-   {
-      res = print_target_sd(targetType, swzTarget, TRUE);
-      if (res != 0)
-         goto cleanup;
-   }
-   else if (_tcsicmp(TEXT("show-token"), argv[0]) == 0)
-   {
-      HANDLE hToken = INVALID_HANDLE_VALUE;
-      if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
-         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      if (argc != 2)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'show-token' only works on processes, threads, and tokens\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'job' requires an absolute NT path to a NT job object\n"));
          print_usage();
          goto cleanup;
       }
-
-      res = get_target_token(swzTarget, targetType, TOKEN_QUERY, &hToken);
-      if (res != 0)
-         goto cleanup;
-      print_token(hToken);
+      swzTarget = argv[1];
+      targetType = TARGET_JOB;
    }
+   else if (_tcsicmp(TEXT("keyedevent"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'keyedevent' requires an absolute NT path to a NT keyed event object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_KEYED_EVENT;
+   }
+   else if (_tcsicmp(TEXT("memorypartition"), argv[0]) == 0 || _tcsicmp(TEXT("mempartition"), argv[0]) == 0 || _tcsicmp(TEXT("partition"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'memorypartition' requires an absolute NT path to a NT keyed event object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_MEMORY_PARTITION;
+   }
+   else if (_tcsicmp(TEXT("mutant"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'mutant' requires an absolute NT path to a NT mutant object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_MUTANT;
+   }
+   else if (_tcsicmp(TEXT("process"), argv[0]) == 0 || _tcsicmp(TEXT("p"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = 1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'process' requires a PID or image name\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_PROCESS;
+   }
+   else if (_tcsicmp(TEXT("regkey"), argv[0]) == 0 || _tcsicmp(TEXT("reg"), argv[0]) == 0 || _tcsicmp(TEXT("r"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'regkey' requires an absolute path to a NT registry key\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_REGKEY;
+   }
+   else if (_tcsicmp(TEXT("section"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'section' requires an absolute NT path to a NT section object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_SECTION;
+   }
+   else if (_tcsicmp(TEXT("semaphore"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'semaphore' requires an absolute NT path to a NT semaphore object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_SEMAPHORE;
+   }
+   else if (_tcsicmp(TEXT("service"), argv[0]) == 0 || _tcsicmp(TEXT("s"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'service' requires a service name\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_SERVICE;
+   }
+   else if (_tcsicmp(TEXT("session"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'session' requires an absolute NT path to a NT session object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_SESSION;
+   }
+   else if (_tcsicmp(TEXT("symboliclink"), argv[0]) == 0 || _tcsicmp(TEXT("symlink"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'symboliclink' requires an absolute NT path to a NT symbolic link object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_SYMBOLIC_LINK;
+   }
+   else if (_tcsicmp(TEXT("thread"), argv[0]) == 0 || _tcsicmp(TEXT("t"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'thread' requires a TID\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_THREAD;
+   }
+   else if (_tcsicmp(TEXT("timer"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'timer' requires an absolute NT path to a NT timer object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_TIMER;
+   }
+   else if (_tcsicmp(TEXT("nt"), argv[0]) == 0)
+   {
+      if (argc != 2 || argv[1][0] != TEXT('\\'))
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'nt' requires an absolute path to an NT object\n"));
+         print_usage();
+         goto cleanup;
+      }
+      res = get_nt_object_type(argv[1], &targetType);
+      if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Determining object type of '%s' failed with code %u\n"), argv[1], res);
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+   }
+   /************************ Generic commands that work on all types ************************/
+   else if (_tcsicmp(TEXT("sddl"), argv[0]) == 0 || _tcsicmp(TEXT("show-sddl"), argv[0]) == 0)
+   {
+      if (argc == 1)
+      {
+         res = print_target_sddl(stdout, targetType, swzTarget);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Error: printing target SDDL failed with code %u\n"), res);
+            goto cleanup;
+         }
+      }
+      else if (argc == 2)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: setting object SDDL is not supported yet\n"));
+         res = ERROR_NOT_SUPPORTED;
+         goto cleanup;
+      }
+      else
+      {
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'sddl' takes at most one parameter\n"));
+         res = ERROR_INVALID_PARAMETER;
+         goto cleanup;
+      }
+   }
+   else if (_tcsicmp(TEXT("sd"), argv[0]) == 0 || _tcsicmp(TEXT("show-sd"), argv[0]) == 0)
+   {
+      res = print_target_sd(stdout, targetType, swzTarget);
+      if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: printing target security descriptor failed with code %u\n"), res);
+         goto cleanup;
+      }
+   }
+   else if (_tcsicmp(TEXT("stop-impersonating"), argv[0]) == 0)
+   {
+      if (!RevertToSelf())
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Error: reverting impersonation failed with code %u\n"), res);
+         goto cleanup;
+      }
+      _ftprintf(stderr, TEXT(" [.] Stopped impersonating token\n"));
+   }
+   /************************ Process, thread and token specific commands ************************/
    else if (_tcsicmp(TEXT("open-token"), argv[0]) == 0)
    {
       if (targetType == TARGET_PROCESS)
@@ -321,15 +527,43 @@ int process_cmdline(int argc, PCWSTR argv[])
       else
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'open-token' only works on processes and threads\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'open-token' only works on processes and threads\n"));
          print_usage();
          goto cleanup;
       }
+   }
+   else if (_tcsicmp(TEXT("show-token"), argv[0]) == 0)
+   {
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
+         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'show-token' only works on processes, threads, and tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY, &hToken);
+      if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: getting the target's token failed with code %u\n"), res);
+         goto cleanup;
+      }
+      print_token(hToken);
    }
    else if (_tcsicmp(TEXT("enable-priv"), argv[0]) == 0 || _tcsicmp(TEXT("e"), argv[0]) == 0)
    {
       PCTSTR swzPrivName = NULL;
       HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
+         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'enable-priv' only works on processes, threads, and tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
       if (argc != 2)
       {
          res = -1;
@@ -340,36 +574,64 @@ int process_cmdline(int argc, PCWSTR argv[])
       swzPrivName = argv[1];
       res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: opening the target's token failed with code %u\n"), res);
          goto cleanup;
+      }
       res = set_privilege(hToken, swzPrivName, SE_PRIVILEGE_ENABLED);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: enabling privilege %s in the target token failed with code %u\n"), swzPrivName, res);
          goto cleanup;
+      }
       _ftprintf(stderr, TEXT(" [.] Privilege %s enabled\n"), swzPrivName);
    }
-   else if (_tcsicmp(TEXT("disable-priv"), argv[0]) == 0 || _tcsicmp(TEXT("-d"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("disable-priv"), argv[0]) == 0 || _tcsicmp(TEXT("d"), argv[0]) == 0)
    {
       PCTSTR swzPrivName = NULL;
       HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
+         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'disable-priv' only works on processes, threads, and tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
       if (argc != 2)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'disable-priv' requires a privilege name or wildcard\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'disable-priv' requires a privilege name or wildcard\n"));
          print_usage();
          goto cleanup;
       }
       swzPrivName = argv[1];
       res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: opening the target's token failed with code %u\n"), res);
          goto cleanup;
+      }
       res = set_privilege(hToken, swzPrivName, 0);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: disabling privilege %s in the target token failed with code %u\n"), swzPrivName, res);
          goto cleanup;
+      }
       _ftprintf(stderr, TEXT(" [.] Privilege %s disabled\n"), swzPrivName);
    }
    else if (_tcsicmp(TEXT("remove-priv"), argv[0]) == 0)
    {
       PCTSTR swzPrivName = NULL;
       HANDLE hToken = INVALID_HANDLE_VALUE;
+      if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
+         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'remove-priv' only works on processes, threads, and tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
       if (argc != 2)
       {
          res = -1;
@@ -380,22 +642,125 @@ int process_cmdline(int argc, PCWSTR argv[])
       swzPrivName = argv[1];
       res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: opening the target's token failed with code %u\n"), res);
          goto cleanup;
+      }
       res = set_privilege(hToken, swzPrivName, SE_PRIVILEGE_REMOVED);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: removing privilege %s in the target token failed with code %u\n"), swzPrivName, res);
          goto cleanup;
+      }
       _ftprintf(stderr, TEXT(" [.] Privilege %s removed\n"), swzPrivName);
    }
+   else if (_tcsicmp(TEXT("impersonate"), argv[0]) == 0)
+   {
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+
+      if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
+         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'impersonate' only works on processes, threads, and tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &hToken);
+      if (res != 0)
+         goto cleanup;
+      res = set_impersonation_token(hToken);
+      if (res != 0)
+         goto cleanup;
+      _ftprintf(stderr, TEXT(" [.] Impersonating token temporarily\n"));
+   }
+   else if (_tcsicmp(TEXT("execute"), argv[0]) == 0 || _tcsicmp(TEXT("x"), argv[0]) == 0)
+   {
+      HANDLE hNewProcess = INVALID_HANDLE_VALUE;
+      HANDLE hToken = INVALID_HANDLE_VALUE;
+
+      if (targetType == TARGET_PROCESS)
+      {
+         targetType = TARGET_PRIMARY_TOKEN;
+      }
+      else if (targetType == TARGET_THREAD)
+      {
+         targetType = TARGET_IMPERSONATION_TOKEN;
+      }
+      if (targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'execute' only works on primary (process) or impersonation (thread) access tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Error: command 'execute' requires a command to execute\n"));
+         print_usage();
+         goto cleanup;
+      }
+
+      _ftprintf(stderr, TEXT(" [.] Executing command '%s'\n"), argv[1]);
+
+      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_IMPERSONATE, &hToken);
+      if (res == 0)
+      {
+         res = create_process_with_token(hToken, (PTSTR)argv[1], &hNewProcess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Warning: process creation with duplicated token failed with code %u\n"), res);
+            goto cleanup;
+         }
+      }
+      else
+      {
+         _ftprintf(stderr, TEXT(" [!] Warning: opening target token for duplication failed with code %u\n"), res);
+         if (targetType == TARGET_PRIMARY_TOKEN)
+         {
+            HANDLE hParentProcess = INVALID_HANDLE_VALUE;
+            res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION | PROCESS_CREATE_PROCESS, &hParentProcess);
+            if (res == 0)
+            {
+               res = create_reparented_process(hParentProcess, (PTSTR)argv[1], &hNewProcess);
+               if (res == 0)
+               {
+                  _ftprintf(stderr, TEXT(" [.] Process %u created, reparented to %u to steal its primary token\n"),
+                     GetProcessId(hNewProcess), GetProcessId(hParentProcess));
+               }
+               else
+               {
+                  _ftprintf(stderr, TEXT(" [!] Warning: creating process reparented to PID %u to steal its primary token failed with code %u\n"),
+                     GetProcessId(hParentProcess), res);
+               }
+            }
+            else if (res != ERROR_ACCESS_DENIED)
+            {
+               _ftprintf(stderr, TEXT(" [!] Warning: opening primary token failed with code %u\n"), res);
+            }
+         }
+      }
+   }
+   /************************ Token specific commands ************************/
    else if (_tcsicmp(TEXT("assign"), argv[0]) == 0)
    {
       HANDLE hThread = INVALID_HANDLE_VALUE;
       HANDLE hToken = INVALID_HANDLE_VALUE;
       PCTSTR swzTargetThread = NULL;
 
+      if (targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'assign' only works on tokens\n"));
+         print_usage();
+         goto cleanup;
+      }
       if (argc != 2)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'assign' requires a privilege name or wildcard\n"));
+         _ftprintf(stderr, TEXT(" [!] Error: command 'assign' requires a thread ID\n"));
          print_usage();
          goto cleanup;
       }
@@ -404,7 +769,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_IMPERSONATE, &hToken);
       if (res != 0)
          goto cleanup;
-      res = open_target(swzTargetThread, TARGET_THREAD, THREAD_SET_THREAD_TOKEN, &hThread);
+      res = open_target_by_typeid(swzTargetThread, TARGET_THREAD, THREAD_SET_THREAD_TOKEN, &hThread);
       if (res != 0)
          goto cleanup;
       if (!SetThreadToken(&hThread, hToken))
@@ -415,33 +780,13 @@ int process_cmdline(int argc, PCWSTR argv[])
       }
       _ftprintf(stderr, TEXT(" [.] Token assigned to thread %s\n"), swzTargetThread);
    }
-   else if (_tcsicmp(TEXT("impersonate"), argv[0]) == 0)
-   {
-      HANDLE hToken = INVALID_HANDLE_VALUE;
-      res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &hToken);
-      if (res != 0)
-         goto cleanup;
-      res = set_impersonation_token(hToken);
-      if (res != 0)
-         goto cleanup;
-      _ftprintf(stderr, TEXT(" [.] Impersonating token temporarily\n"));
-   }
-   else if (_tcsicmp(TEXT("stop-impersonating"), argv[0]) == 0)
-   {
-      if (!RevertToSelf())
-      {
-         res = GetLastError();
-         _ftprintf(stderr, TEXT(" [!] Error: reverting impersonation failed with code %u\n"), res);
-         goto cleanup;
-      }
-      _ftprintf(stderr, TEXT(" [.] Stopped impersonating token\n"));
-   }
+   /************************ Process specific commands ************************/
    else if (_tcsicmp(TEXT("list-handles"), argv[0]) == 0)
    {
       if (targetType != TARGET_PROCESS)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'list-handles' only works on processes\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'list-handles' only works on processes\n"));
          print_usage();
          goto cleanup;
       }
@@ -455,19 +800,37 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (targetType != TARGET_PROCESS)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'list-memmap' only works on processes\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'list-memmap' only works on processes\n"));
          print_usage();
          goto cleanup;
       }
 
       _ftprintf(stderr, TEXT(" [.] Memory map of process %s :\n"), swzTarget);
 
-      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
       if (res != 0)
          goto cleanup;
 
       res = list_memmap(hProcess);
 
+      CloseHandle(hProcess);
+   }
+   else if (_tcsicmp(TEXT("list-mitigations"), argv[0]) == 0 || _tcsicmp(TEXT("mitigations"), argv[0]) == 0)
+   {
+      HANDLE hProcess = INVALID_HANDLE_VALUE;
+      if (targetType != TARGET_PROCESS)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'list-mitigations' only works with a target process selected\n"));
+         print_usage();
+         goto cleanup;
+      }
+      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+      if (res != 0)
+         goto cleanup;
+
+      _ftprintf(stderr, TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
+      res = list_process_mitigations(hProcess);
       CloseHandle(hProcess);
    }
    else if (_tcsicmp(TEXT("steal-token"), argv[0]) == 0)
@@ -485,20 +848,20 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (targetType != TARGET_PROCESS)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'steal-token' only works with a target process selected\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'steal-token' only works with a target process selected\n"));
          print_usage();
          goto cleanup;
       }
       else if (argc != 2)
       {
          res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: option 'steal-token' requires a command to execute\n"));
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: option 'steal-token' requires a command to execute\n"));
          print_usage();
          goto cleanup;
       }
       swzTargetCommand = (PTSTR)argv[1];
 
-      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_CREATE_PROCESS, &hProcess);
+      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_CREATE_PROCESS, &hProcess);
       if (res != 0)
          goto cleanup;
 
@@ -531,26 +894,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       CloseHandle(hProcess);
       _ftprintf(stderr, TEXT(" [.] Token stolen by child process %u executing %s\n"), procInfo.dwProcessId, swzTargetCommand);
    }
-   else if (_tcsicmp(TEXT("list-mitigations"), argv[0]) == 0)
-   {
-      HANDLE hProcess = INVALID_HANDLE_VALUE;
-
-      if (targetType != TARGET_PROCESS)
-      {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'list-mitigations' only works with a target process selected\n"));
-         print_usage();
-         goto cleanup;
-      }
-
-      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
-      if (res != 0)
-         goto cleanup;
-
-      _ftprintf(stderr, TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
-      res = list_process_mitigations(hProcess);
-      CloseHandle(hProcess);
-   }
+   /************************ Reachable objects enumeration commands ************************/
    else if (_tcsicmp(TEXT("find-ntobj"), argv[0]) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
@@ -569,7 +913,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsnicmp(TEXT("find-p"), argv[0], 6) == 0)
+   else if (_tcsicmp(TEXT("proc-list"), argv[0]) == 0 || _tcsicmp(TEXT("process-list"), argv[0]) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -578,7 +922,7 @@ int process_cmdline(int argc, PCWSTR argv[])
          res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
          if (res != 0)
          {
-            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-proc' argument as an access right\n"));
+            _ftprintf(stderr, TEXT(" [!] Invalid parameter: unable to parse 'process-list' argument as an access right\n"));
             print_usage();
             goto cleanup;
          }
@@ -587,7 +931,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsnicmp(TEXT("find-f"), argv[0], 6) == 0)
+   else if (_tcsicmp(TEXT("file-list"), argv[0]) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -599,7 +943,7 @@ int process_cmdline(int argc, PCWSTR argv[])
          res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
          if (res != 0)
          {
-            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-file' argument as an access right\n"));
+            _ftprintf(stderr, TEXT(" [!] Invalid parameter: unable to parse 'file-list' argument as an access right\n"));
             print_usage();
             goto cleanup;
          }
@@ -608,7 +952,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsnicmp(TEXT("find-r"), argv[0], 6) == 0)
+   else if (_tcsicmp(TEXT("reg-list"), argv[0]) == 0 || _tcsicmp(TEXT("regkey-list"), argv[0]) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -617,7 +961,7 @@ int process_cmdline(int argc, PCWSTR argv[])
          res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
          if (res != 0)
          {
-            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-regkey' argument as an access right\n"));
+            _ftprintf(stderr, TEXT(" [!] Invalid parameter: unable to parse 'regkey-list' argument as an access right\n"));
             print_usage();
             goto cleanup;
          }
@@ -626,7 +970,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsnicmp(TEXT("find-s"), argv[0], 6) == 0)
+   else if (_tcsicmp(TEXT("service-list"), argv[0]) == 0 || _tcsicmp(TEXT("svc-list"), argv[0]) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -635,7 +979,7 @@ int process_cmdline(int argc, PCWSTR argv[])
          res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
          if (res != 0)
          {
-            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-service' argument as an access right\n"));
+            _ftprintf(stderr, TEXT(" [!] Invalid parameter: unable to parse 'service-list' argument as an access right\n"));
             print_usage();
             goto cleanup;
          }
@@ -644,7 +988,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsicmp(TEXT("find-namedpipe"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("alpc-list"), argv[0]) == 0)
    {
       PTSTR swzDesiredAccess = (PTSTR)argv[1];
       DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
@@ -653,7 +997,25 @@ int process_cmdline(int argc, PCWSTR argv[])
          res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
          if (res != 0)
          {
-            _ftprintf(stderr, TEXT(" [!] Error: unable to parse 'find-namedpipe' argument as an access right\n"));
+            _ftprintf(stderr, TEXT(" [!] Invalid parameter: unable to parse 'alpc-list' argument as an access right\n"));
+            print_usage();
+            goto cleanup;
+         }
+      }
+      res = enumerate_alpc_ports_with(dwDesiredAccess);
+      if (res != 0)
+         goto cleanup;
+   }
+   else if (_tcsicmp(TEXT("namedpipe-list"), argv[0]) == 0)
+   {
+      PTSTR swzDesiredAccess = (PTSTR)argv[1];
+      DWORD dwDesiredAccess = MAXIMUM_ALLOWED;
+      if (argc == 2)
+      {
+         res = parse_access_right(swzDesiredAccess, &dwDesiredAccess);
+         if (res != 0)
+         {
+            _ftprintf(stderr, TEXT(" [!] Invalid parameter: unable to parse 'namedpipe-list' argument as an access right\n"));
             print_usage();
             goto cleanup;
          }
@@ -662,43 +1024,31 @@ int process_cmdline(int argc, PCWSTR argv[])
       if (res != 0)
          goto cleanup;
    }
-   else if (_tcsicmp(TEXT("sandbox-check"), argv[0]) == 0)
-   {
-      HANDLE hProcess = INVALID_HANDLE_VALUE;
-
-      if (targetType != TARGET_PROCESS)
-      {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: command 'sandbox-check' only works with a target process selected\n"));
-         print_usage();
-         goto cleanup;
-      }
-
-      res = open_target(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
-      if (res != 0)
-         goto cleanup;
-
-      _ftprintf(stderr, TEXT(" [.] Mitigations enabled by process %s :\n"), swzTarget);
-      res = list_process_mitigations(hProcess);
-      CloseHandle(hProcess);
-   }
-   else if (_tcsicmp(TEXT("list-rpcs"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("rpc-list"), argv[0]) == 0 || _tcsicmp(TEXT("rpcs-list"), argv[0]) == 0 || _tcsicmp(TEXT("rpcs"), argv[0]) == 0)
    {
       if (targetType == TARGET_FILE)
       {
          res = list_rpc_named_pipe(swzTarget);
       }
+      else if (targetType == TARGET_ALPC_CONNECTION_PORT)
+      {
+         res = list_rpc_alpc(swzTarget);
+      }
       else
       {
-         res = -1;
-         _ftprintf(stderr, TEXT(" [!] Error: RPC enumeration is only implemented for named pipes, for now\n"));
-         goto cleanup;
+         res = list_rpcs_mapped();
       }
+   }
+   /************************ Wrapper around other commands ************************/
+   else if (_tcsicmp(TEXT("sandbox-check"), argv[0]) == 0)
+   {
+      _ftprintf(stderr, TEXT(" [!] Sandbox checklist: WIP\n"));
+      res = ERROR_NOT_SUPPORTED;
    }
    else
    {
       res = -1;
-      _ftprintf(stderr, TEXT(" [!] Error: unknown command '%s'\n"), argv[0]);
+      _ftprintf(stderr, TEXT(" [!] Invalid parameter: unknown command '%s'\n"), argv[0]);
       print_usage();
       goto cleanup;
    }
@@ -723,6 +1073,8 @@ int wmain(int argc, PCWSTR argv[])
    // Privileges that will be useful anyway if we try to access files, processes, threads, their token, or their security descriptor's SACL
    set_privilege_caller(SE_DEBUG_NAME, SE_PRIVILEGE_ENABLED);
    set_privilege_caller(SE_IMPERSONATE_NAME, SE_PRIVILEGE_ENABLED);
+   set_privilege_caller(SE_ASSIGNPRIMARYTOKEN_NAME, SE_PRIVILEGE_ENABLED);
+   set_privilege_caller(SE_INCREASE_QUOTA_NAME, SE_PRIVILEGE_ENABLED);
    set_privilege_caller(SE_BACKUP_NAME, SE_PRIVILEGE_ENABLED);
    set_privilege_caller(SE_SECURITY_NAME, SE_PRIVILEGE_ENABLED);
 
@@ -745,7 +1097,7 @@ int wmain(int argc, PCWSTR argv[])
       else
       {
          res = 1;
-         _ftprintf(stderr, TEXT(" [!] Error: invalid argument '%s'\n"), argv[argn]);
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: unexpected argument '%s'\n"), argv[argn]);
          print_usage();
          goto cleanup;
       }
