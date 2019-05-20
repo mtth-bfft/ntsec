@@ -7,7 +7,7 @@
 #include "include\token.h"
 #include "include\utils.h"
 
-int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_file_object(PCTSTR swzNTPath, target_t *pTargetType, DWORD dwRightsRequired, HANDLE *phOut)
 {
    int res = 0;
    NTSTATUS status = 0;
@@ -23,9 +23,35 @@ int open_nt_file_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
    }
 
    InitializeObjectAttributes(&objAttr, pUSObjName, 0, NULL, NULL);
-   status = NtCreateFile(phOut, dwRightsRequired, &objAttr, &ioStatus, &liInitialSize, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN, FILE_OPEN_REPARSE_POINT, NULL, 0);
+   status = NtCreateFile(phOut, dwRightsRequired, &objAttr, &ioStatus, &liInitialSize, FILE_ATTRIBUTE_NORMAL,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN, FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT, NULL, 0);
+   if (status == STATUS_NOT_A_DIRECTORY)
+   {
+      status = NtCreateFile(phOut, dwRightsRequired, &objAttr, &ioStatus, &liInitialSize, FILE_ATTRIBUTE_NORMAL,
+         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN, FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT, NULL, 0);
+   }
+   else
+   {
+      _ftprintf(stderr, TEXT(" [.] File object is a directory\n"));
+      *pTargetType = TARGET_FILE_DIRECTORY;
+   }
    if (!NT_SUCCESS(status))
       res = status;
+
+   // Check if we need to redirect the actual object type to a more specific file type
+   if (res == 0)
+   {
+      if (GetFileType(*phOut) == FILE_TYPE_PIPE)
+      {
+         _ftprintf(stderr, TEXT(" [.] File object is a named pipe\n"));
+         *pTargetType = TARGET_FILE_NAMED_PIPE;
+      }
+   }
+   else
+   {
+      _ftprintf(stderr, TEXT(" [!] Warning: unable to open handle to file with empty access rights, code %u\n"), res);
+      res = 0;
+   }
 
 cleanup:
    safe_free(pUSObjName);
@@ -36,6 +62,7 @@ int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCall
 {
    int res = 0;
    BOOL bImpersonating = FALSE;
+   target_t targetType = TARGET_FILE_DIRECTORY;
    HANDLE hDir = INVALID_HANDLE_VALUE;
    ULONG ulFileBufSize = 0x1000;
    PFILE_DIRECTORY_INFORMATION pFile = safe_alloc(ulFileBufSize);
@@ -72,7 +99,7 @@ int foreach_nt_file(PCTSTR swzDirectoryFileNTPath, nt_path_enum_callback_t pCall
       bImpersonating = TRUE;
    }
 
-   res = open_nt_file_object(swzChildNTPath, FILE_LIST_DIRECTORY | SYNCHRONIZE, &hDir);
+   res = open_nt_file_object(swzChildNTPath, &targetType, FILE_LIST_DIRECTORY | SYNCHRONIZE, &hDir);
 
    if (bImpersonating)
    {
@@ -148,12 +175,13 @@ static int nt_file_callback(PCTSTR swzFileNTPath, PVOID pData)
    int res2 = 0;
    DWORD dwDesiredAccess = *(PDWORD)pData;
    HANDLE hFile = INVALID_HANDLE_VALUE;
+   target_t targetType = TARGET_FILE;
 
    res = start_impersonated_operation();
    if (res != 0)
       goto cleanup;
 
-   res = open_nt_file_object(swzFileNTPath, dwDesiredAccess, &hFile);
+   res = open_nt_file_object(swzFileNTPath, &targetType, dwDesiredAccess, &hFile);
    if (res == 0)
    {
       _tprintf(TEXT("%s\n"), swzFileNTPath);
@@ -183,12 +211,13 @@ static int nt_named_pipe_callback(PCTSTR swzFileNTPath, PVOID pData)
    int res2 = 0;
    DWORD dwDesiredAccess = *(PDWORD)pData;
    HANDLE hFile = INVALID_HANDLE_VALUE;
+   target_t targetType = TARGET_FILE_NAMED_PIPE;
 
    res = start_impersonated_operation();
    if (res != 0)
       goto cleanup;
 
-   res = open_nt_file_object(swzFileNTPath, dwDesiredAccess, &hFile);
+   res = open_nt_file_object(swzFileNTPath, &targetType, dwDesiredAccess, &hFile);
    if (res == 0)
    {
       if (_tcsnicmp(TEXT("\\Device\\NamedPipe\\"), swzFileNTPath, 18) == 0)

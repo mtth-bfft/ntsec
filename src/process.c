@@ -160,8 +160,9 @@ cleanup:
    return res;
 }
 
-int open_nt_process_object(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOut)
+int open_nt_process_object(PCTSTR swzTarget, target_t *pTargetType, DWORD dwRightsRequired, PHANDLE phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    long lID = 0;
    DWORD dwPID = 0;

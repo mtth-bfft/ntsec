@@ -344,6 +344,18 @@ int process_cmdline(int argc, PCWSTR argv[])
       swzTarget = argv[1];
       targetType = TARGET_MUTANT;
    }
+   else if (_tcsicmp(TEXT("namedpipe"), argv[0]) == 0)
+   {
+      if (argc != 2)
+      {
+         res = -1;
+         _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'namedpipe' requires a named pipe name or an absolute NT path\n"));
+         print_usage();
+         goto cleanup;
+      }
+      swzTarget = argv[1];
+      targetType = TARGET_FILE_NAMED_PIPE;
+   }
    else if (_tcsicmp(TEXT("process"), argv[0]) == 0 || _tcsicmp(TEXT("p"), argv[0]) == 0)
    {
       if (argc != 2)
@@ -474,7 +486,7 @@ int process_cmdline(int argc, PCWSTR argv[])
    {
       if (argc == 1)
       {
-         res = print_target_sddl(stdout, targetType, swzTarget);
+         res = print_target_sddl(stdout, &targetType, swzTarget);
          if (res != 0)
          {
             _ftprintf(stderr, TEXT(" [!] Error: printing target SDDL failed with code %u\n"), res);
@@ -496,7 +508,7 @@ int process_cmdline(int argc, PCWSTR argv[])
    }
    else if (_tcsicmp(TEXT("sd"), argv[0]) == 0 || _tcsicmp(TEXT("show-sd"), argv[0]) == 0)
    {
-      res = print_target_sd(stdout, targetType, swzTarget);
+      res = print_target_sd(stdout, &targetType, swzTarget);
       if (res != 0)
       {
          _ftprintf(stderr, TEXT(" [!] Error: printing target security descriptor failed with code %u\n"), res);
@@ -518,11 +530,11 @@ int process_cmdline(int argc, PCWSTR argv[])
    {
       if (targetType == TARGET_PROCESS)
       {
-         targetType = TARGET_PRIMARY_TOKEN;
+         targetType = TARGET_TOKEN_PRIMARY;
       }
       else if (targetType == TARGET_THREAD)
       {
-         targetType = TARGET_IMPERSONATION_TOKEN;
+         targetType = TARGET_TOKEN_IMPERSONATION;
       }
       else
       {
@@ -536,7 +548,7 @@ int process_cmdline(int argc, PCWSTR argv[])
    {
       HANDLE hToken = INVALID_HANDLE_VALUE;
       if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
-         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+         targetType != TARGET_TOKEN_PRIMARY && targetType != TARGET_TOKEN_IMPERSONATION)
       {
          res = -1;
          _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'show-token' only works on processes, threads, and tokens\n"));
@@ -557,7 +569,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       PCTSTR swzPrivName = NULL;
       HANDLE hToken = INVALID_HANDLE_VALUE;
       if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
-         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+         targetType != TARGET_TOKEN_PRIMARY && targetType != TARGET_TOKEN_IMPERSONATION)
       {
          res = -1;
          _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'enable-priv' only works on processes, threads, and tokens\n"));
@@ -591,7 +603,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       PCTSTR swzPrivName = NULL;
       HANDLE hToken = INVALID_HANDLE_VALUE;
       if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
-         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+         targetType != TARGET_TOKEN_PRIMARY && targetType != TARGET_TOKEN_IMPERSONATION)
       {
          res = -1;
          _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'disable-priv' only works on processes, threads, and tokens\n"));
@@ -625,7 +637,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       PCTSTR swzPrivName = NULL;
       HANDLE hToken = INVALID_HANDLE_VALUE;
       if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
-         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+         targetType != TARGET_TOKEN_PRIMARY && targetType != TARGET_TOKEN_IMPERSONATION)
       {
          res = -1;
          _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'remove-priv' only works on processes, threads, and tokens\n"));
@@ -659,7 +671,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       HANDLE hToken = INVALID_HANDLE_VALUE;
 
       if (targetType != TARGET_PROCESS && targetType != TARGET_THREAD &&
-         targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+         targetType != TARGET_TOKEN_PRIMARY && targetType != TARGET_TOKEN_IMPERSONATION)
       {
          res = -1;
          _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'impersonate' only works on processes, threads, and tokens\n"));
@@ -682,13 +694,13 @@ int process_cmdline(int argc, PCWSTR argv[])
 
       if (targetType == TARGET_PROCESS)
       {
-         targetType = TARGET_PRIMARY_TOKEN;
+         targetType = TARGET_TOKEN_PRIMARY;
       }
       else if (targetType == TARGET_THREAD)
       {
-         targetType = TARGET_IMPERSONATION_TOKEN;
+         targetType = TARGET_TOKEN_IMPERSONATION;
       }
-      if (targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      if (targetType != TARGET_TOKEN_PRIMARY && targetType != TARGET_TOKEN_IMPERSONATION)
       {
          res = -1;
          _ftprintf(stderr, TEXT(" [!] Error: command 'execute' only works on primary (process) or impersonation (thread) access tokens\n"));
@@ -718,10 +730,11 @@ int process_cmdline(int argc, PCWSTR argv[])
       else
       {
          _ftprintf(stderr, TEXT(" [!] Warning: opening target token for duplication failed with code %u\n"), res);
-         if (targetType == TARGET_PRIMARY_TOKEN)
+         if (targetType == TARGET_TOKEN_PRIMARY)
          {
+            target_t procTargetType = TARGET_PROCESS;
             HANDLE hParentProcess = INVALID_HANDLE_VALUE;
-            res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION | PROCESS_CREATE_PROCESS, &hParentProcess);
+            res = open_target_by_typeid(swzTarget, &procTargetType, PROCESS_QUERY_INFORMATION | PROCESS_CREATE_PROCESS, &hParentProcess);
             if (res == 0)
             {
                res = create_reparented_process(hParentProcess, (PTSTR)argv[1], &hNewProcess);
@@ -749,8 +762,9 @@ int process_cmdline(int argc, PCWSTR argv[])
       HANDLE hThread = INVALID_HANDLE_VALUE;
       HANDLE hToken = INVALID_HANDLE_VALUE;
       PCTSTR swzTargetThread = NULL;
+      target_t assignedTargetType = TARGET_THREAD;
 
-      if (targetType != TARGET_PRIMARY_TOKEN && targetType != TARGET_IMPERSONATION_TOKEN)
+      if (targetType != TARGET_TOKEN_PRIMARY && targetType != TARGET_TOKEN_IMPERSONATION)
       {
          res = -1;
          _ftprintf(stderr, TEXT(" [!] Invalid parameter: command 'assign' only works on tokens\n"));
@@ -769,7 +783,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_IMPERSONATE, &hToken);
       if (res != 0)
          goto cleanup;
-      res = open_target_by_typeid(swzTargetThread, TARGET_THREAD, THREAD_SET_THREAD_TOKEN, &hThread);
+      res = open_target_by_typeid(swzTargetThread, &assignedTargetType, THREAD_SET_THREAD_TOKEN, &hThread);
       if (res != 0)
          goto cleanup;
       if (!SetThreadToken(&hThread, hToken))
@@ -807,7 +821,7 @@ int process_cmdline(int argc, PCWSTR argv[])
 
       _ftprintf(stderr, TEXT(" [.] Memory map of process %s :\n"), swzTarget);
 
-      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+      res = open_target_by_typeid(swzTarget, &targetType, PROCESS_QUERY_INFORMATION, &hProcess);
       if (res != 0)
       {
          _ftprintf(stderr, TEXT(" [!] Error: opening process %s to query its address space failed with code %u\n"),
@@ -829,7 +843,7 @@ int process_cmdline(int argc, PCWSTR argv[])
          print_usage();
          goto cleanup;
       }
-      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+      res = open_target_by_typeid(swzTarget, &targetType, PROCESS_QUERY_INFORMATION, &hProcess);
       if (res != 0)
          goto cleanup;
 
@@ -865,7 +879,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       }
       swzTargetCommand = (PTSTR)argv[1];
 
-      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_CREATE_PROCESS, &hProcess);
+      res = open_target_by_typeid(swzTarget, &targetType, PROCESS_CREATE_PROCESS, &hProcess);
       if (res != 0)
          goto cleanup;
 

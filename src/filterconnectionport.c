@@ -4,8 +4,9 @@
 #include "include\utils.h"
 #include "include\nt.h"
 
-int open_nt_filterconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_filterconnectionport_object(PCTSTR swzNTPath, target_t *pTargetType, DWORD dwRightsRequired, HANDLE *phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    HRESULT hRes = 0;
    PWSTR swzPortName = string_to_wide(swzNTPath);

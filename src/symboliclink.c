@@ -3,8 +3,9 @@
 #include "include\nt.h"
 #include "include\utils.h"
 
-int open_nt_symbolic_link_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_symbolic_link_object(PCTSTR swzNTPath, target_t *pTargetType, DWORD dwRightsRequired, HANDLE *phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };

@@ -7,8 +7,9 @@
 #include "include\targets.h"
 #include "include\utils.h"
 
-int open_nt_directory_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_directory_object(PCTSTR swzNTPath, target_t *pTargetType, DWORD dwRightsRequired, HANDLE *phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    NTSTATUS status = 0;
    OBJECT_ATTRIBUTES objAttr = { 0 };
@@ -37,6 +38,7 @@ int foreach_nt_object(PCTSTR swzDirectoryNTPath, nt_object_enum_callback_t pCall
 {
    int res = 0;
    BOOL bImpersonating = FALSE;
+   target_t targetType = TARGET_FILE_DIRECTORY;
    HANDLE hDir = INVALID_HANDLE_VALUE;
    ULONG ulBufferSize = 0x1000;
    ULONG ulBufferReq = 0;
@@ -72,7 +74,7 @@ int foreach_nt_object(PCTSTR swzDirectoryNTPath, nt_object_enum_callback_t pCall
       bImpersonating = TRUE;
    }
 
-   res = open_nt_directory_object(swzDirectoryNTPath, DIRECTORY_QUERY | DIRECTORY_QUERY, &hDir);
+   res = open_nt_directory_object(swzDirectoryNTPath, &targetType, DIRECTORY_QUERY | DIRECTORY_QUERY, &hDir);
    if (bImpersonating)
    {
       int res2 = end_impersonated_operation();

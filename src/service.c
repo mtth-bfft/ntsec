@@ -4,8 +4,9 @@
 #include "include\service.h"
 #include "include\utils.h"
 
-int open_service(PCTSTR swzName, DWORD dwRightsRequired, SC_HANDLE *phOut)
+int open_service(PCTSTR swzName, target_t *pTargetType, DWORD dwRightsRequired, SC_HANDLE *phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    SC_HANDLE hSvcMgr = NULL;
    SC_HANDLE hSvc = NULL;
@@ -36,6 +37,7 @@ cleanup:
 int enumerate_services_with(DWORD dwDesiredAccess)
 {
    int res = 0;
+   target_t targetType = TARGET_SERVICE;
    SC_HANDLE hSvcMgr = NULL;
    DWORD dwSvcTypes = SERVICE_DRIVER | SERVICE_FILE_SYSTEM_DRIVER | SERVICE_KERNEL_DRIVER | SERVICE_WIN32_OWN_PROCESS | SERVICE_WIN32_SHARE_PROCESS;
    DWORD dwBufSize = 0x1000;
@@ -75,7 +77,7 @@ int enumerate_services_with(DWORD dwDesiredAccess)
       for (DWORD i = 0; i < dwSvcCount; i++)
       {
          SC_HANDLE hSvc = NULL;
-         res = open_service(pServices[i].lpServiceName, dwDesiredAccess, &hSvc);
+         res = open_service(pServices[i].lpServiceName, &targetType, dwDesiredAccess, &hSvc);
          if (res == 0)
          {
             if (!CloseServiceHandle(hSvc))

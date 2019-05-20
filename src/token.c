@@ -261,10 +261,12 @@ cleanup:
    return res;
 }
 
-int open_nt_primary_token(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOut)
+int open_nt_primary_token(PCTSTR swzTarget, target_t *pTargetType, DWORD dwRightsRequired, PHANDLE phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    HANDLE hProcess = INVALID_HANDLE_VALUE;
+   target_t targetType = TARGET_PROCESS;
 
    if (swzTarget == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
    {
@@ -272,7 +274,7 @@ int open_nt_primary_token(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOu
       goto cleanup;
    }
 
-   res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
+   res = open_target_by_typeid(swzTarget, &targetType, PROCESS_QUERY_INFORMATION, &hProcess);
    if (res != 0)
    {
       _ftprintf(stderr, TEXT(" [!] Warning: opening process %s to query its token failed with code %u\n"),
@@ -293,10 +295,12 @@ cleanup:
    return res;
 }
 
-int open_nt_impersonation_token(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOut)
+int open_nt_impersonation_token(PCTSTR swzTarget, target_t *pTargetType, DWORD dwRightsRequired, PHANDLE phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    HANDLE hThread = INVALID_HANDLE_VALUE;
+   target_t targetType = TARGET_THREAD;
 
    if (swzTarget == NULL || phOut == NULL || (*phOut != NULL && *phOut != INVALID_HANDLE_VALUE))
    {
@@ -304,7 +308,7 @@ int open_nt_impersonation_token(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDL
       goto cleanup;
    }
 
-   res = open_target_by_typeid(swzTarget, TARGET_THREAD, THREAD_QUERY_INFORMATION, &hThread);
+   res = open_target_by_typeid(swzTarget, &targetType, THREAD_QUERY_INFORMATION, &hThread);
    if (res != 0)
    {
       _ftprintf(stderr, TEXT(" [!] Warning: opening thread %s to query its token failed with code %u\n"),
@@ -560,9 +564,10 @@ int get_target_token(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequir
    int res = 0;
    HANDLE hTarget = INVALID_HANDLE_VALUE;
 
-   if (targetType == TARGET_PRIMARY_TOKEN || targetType == TARGET_PROCESS)
+   if (targetType == TARGET_TOKEN_PRIMARY || targetType == TARGET_PROCESS)
    {
-      res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hTarget);
+      targetType = TARGET_PROCESS;
+      res = open_target_by_typeid(swzTarget, &targetType, PROCESS_QUERY_INFORMATION, &hTarget);
       if (res != 0)
          goto cleanup;
       if (!OpenProcessToken(hTarget, dwRightsRequired, phToken))
@@ -572,9 +577,10 @@ int get_target_token(PCTSTR swzTarget, target_t targetType, DWORD dwRightsRequir
          goto cleanup;
       }
    }
-   else if (targetType == TARGET_IMPERSONATION_TOKEN || targetType == TARGET_THREAD)
+   else if (targetType == TARGET_TOKEN_IMPERSONATION || targetType == TARGET_THREAD)
    {
-      res = open_target_by_typeid(swzTarget, TARGET_THREAD, THREAD_QUERY_INFORMATION, &hTarget);
+      targetType = TARGET_THREAD;
+      res = open_target_by_typeid(swzTarget, &targetType, THREAD_QUERY_INFORMATION, &hTarget);
       if (res != 0)
          goto cleanup;
       if (!OpenThreadToken(hTarget, dwRightsRequired, TRUE, phToken))

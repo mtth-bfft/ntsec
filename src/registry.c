@@ -6,8 +6,9 @@
 #include "include\token.h"
 #include "include\utils.h"
 
-int open_nt_key_object(PCTSTR swzNTorWin32Path, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_key_object(PCTSTR swzNTorWin32Path, target_t *pTargetType, DWORD dwRightsRequired, HANDLE *phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    NTSTATUS status = 0;
    PCTSTR swzWin32Path = NULL;
@@ -94,6 +95,7 @@ int foreach_nt_key(PCTSTR swzKeyNTPath, nt_path_enum_callback_t pCallback, PVOID
    int res = 0;
    BOOL bImpersonating = FALSE;
    HANDLE hKey = INVALID_HANDLE_VALUE;
+   target_t targetType = TARGET_REGKEY;
    NTSTATUS status = 0;
    ULONG ulIndex = 0;
    ULONG ulBufLen = 0x1000;
@@ -130,7 +132,7 @@ int foreach_nt_key(PCTSTR swzKeyNTPath, nt_path_enum_callback_t pCallback, PVOID
       bImpersonating = TRUE;
    }
 
-   res = open_nt_key_object(swzKeyNTPath, KEY_ENUMERATE_SUB_KEYS, &hKey);
+   res = open_nt_key_object(swzKeyNTPath, &targetType, KEY_ENUMERATE_SUB_KEYS, &hKey);
 
    if (bImpersonating)
    {
@@ -187,12 +189,13 @@ static int nt_key_callback(PCTSTR swzKeyNTPath, PVOID pData)
    int res = 0;
    DWORD dwDesiredAccess = *(PDWORD)pData;
    HANDLE hKey = INVALID_HANDLE_VALUE;
+   target_t targetType = TARGET_REGKEY;
 
    res = start_impersonated_operation();
    if (res != 0)
       goto cleanup;
 
-   res = open_nt_key_object(swzKeyNTPath, dwDesiredAccess, &hKey);
+   res = open_nt_key_object(swzKeyNTPath, &targetType, dwDesiredAccess, &hKey);
    if (res == 0)
    {
       _tprintf(TEXT("%s\n"), swzKeyNTPath);

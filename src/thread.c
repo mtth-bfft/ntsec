@@ -2,8 +2,9 @@
 #include <tchar.h>
 #include "include\thread.h"
 
-int open_nt_thread_object(PCTSTR swzTarget, DWORD dwRightsRequired, PHANDLE phOut)
+int open_nt_thread_object(PCTSTR swzTarget, target_t *pTargetType, DWORD dwRightsRequired, PHANDLE phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    long lID = 0;
    DWORD dwTID = 0;

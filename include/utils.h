@@ -19,3 +19,4 @@ UNICODE_STRING* string_to_unicode(PCTSTR swzIn);
 PTSTR unicode_to_string(PUNICODE_STRING pIn);
 PWSTR string_to_wide(PCTSTR swzIn);
 VOID basedir(PTSTR swzPath);
+SIZE_T count_bits_set(SIZE_T dwBitField);

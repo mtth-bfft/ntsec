@@ -97,3 +97,15 @@ PWSTR string_to_wide(PCTSTR swzIn)
 #error Not implemented.
 #endif
 }
+
+SIZE_T count_bits_set(SIZE_T dwBitField)
+{
+   SIZE_T res = 0;
+   while (dwBitField != 0)
+   {
+      if ((dwBitField & 1) != 0)
+         res++;
+      dwBitField >>= 1;
+   }
+   return res;
+}

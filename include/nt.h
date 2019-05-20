@@ -8,7 +8,8 @@
 
 #define FILE_OPEN 0x00000001
 #define FILE_OPEN_REPARSE_POINT 0x00200000
-
+#define FILE_DIRECTORY_FILE 0x00000001
+#define FILE_NON_DIRECTORY_FILE 0x00000040
 #define OBJ_CASE_INSENSITIVE    0x00000040L
 
 #define DIRECTORY_QUERY 0x0001
@@ -19,6 +20,7 @@
 #define STATUS_BUFFER_OVERFLOW 0x80000005
 #define STATUS_NO_MORE_FILES 0x80000006
 #define STATUS_NO_MORE_ENTRIES  0x8000001AL
+#define STATUS_NOT_A_DIRECTORY 0xC0000103
 
 #define InitializeObjectAttributes( p, n, a, r, s ) { \
    (p)->Length = sizeof( OBJECT_ATTRIBUTES );          \
@@ -90,6 +92,26 @@ typedef enum _FILE_INFORMATION_CLASS {
    FileOleInformation,
    FileMaximumInformation
 } FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;
+
+typedef enum {
+   ObjectBasicInformation = 0,
+   ObjectNameInformation = 1,
+   ObjectTypeInformation = 2,
+} OBJECT_INFORMATION_CLASS, *POBJECT_INFORMATION_CLASS;
+
+typedef struct __PUBLIC_OBJECT_TYPE_INFORMATION {
+   UNICODE_STRING TypeName;
+   ULONG          Reserved[22];
+   BYTE           Reserved2[1024];
+} PUBLIC_OBJECT_TYPE_INFORMATION, *PPUBLIC_OBJECT_TYPE_INFORMATION;
+
+typedef struct _PUBLIC_OBJECT_BASIC_INFORMATION {
+   ULONG       Attributes;
+   ACCESS_MASK GrantedAccess;
+   ULONG       HandleCount;
+   ULONG       PointerCount;
+   ULONG       Reserved[10];
+} PUBLIC_OBJECT_BASIC_INFORMATION, *PPUBLIC_OBJECT_BASIC_INFORMATION;
 
 typedef struct _KEY_BASIC_INFORMATION {
    LARGE_INTEGER LastWriteTime;
@@ -267,8 +289,14 @@ typedef NTSTATUS(WINAPI *PNtQuerySystemInformation)(
    IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
    OUT PVOID                   SystemInformation,
    IN ULONG                    SystemInformationLength,
-   OUT PULONG                  ReturnLength
-);
+   OUT PULONG                  ReturnLength);
+
+typedef NTSTATUS(WINAPI *PNtQueryObject)(
+   IN  HANDLE                   Handle,
+   IN  OBJECT_INFORMATION_CLASS ObjectInformationClass,
+   OUT PVOID                    ObjectInformation,
+   IN  ULONG                    ObjectInformationLength,
+   OUT PULONG                   ReturnLength);
 
 // ALPC types and imports
 
@@ -365,6 +393,7 @@ extern PNtOpenKeyEx NtOpenKeyEx;
 extern PNtEnumerateKey NtEnumerateKey;
 extern PNtAlpcConnectPort NtAlpcConnectPort;
 extern PNtQuerySystemInformation NtQuerySystemInformation;
+extern PNtQueryObject NtQueryObject;
 
 int resolve_imports();
 int get_handle_granted_rights(HANDLE hHandle, PDWORD pdwGrantedRights);

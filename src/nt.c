@@ -30,6 +30,7 @@ PNtOpenKeyEx NtOpenKeyEx = NULL;
 PNtEnumerateKey NtEnumerateKey = NULL;
 PNtAlpcConnectPort NtAlpcConnectPort = NULL;
 PNtQuerySystemInformation NtQuerySystemInformation = NULL;
+PNtQueryObject NtQueryObject = NULL;
 
 static int do_import_function(HMODULE hLib, PCSTR swzFunctionName, PVOID pFunctionPtr)
 {
@@ -118,6 +119,9 @@ int resolve_imports()
    if (res != 0)
       goto cleanup;
    res = do_import_function(hNTDLL, "NtQuerySystemInformation", &NtQuerySystemInformation);
+   if (res != 0)
+      goto cleanup;
+   res = do_import_function(hNTDLL, "NtQueryObject", &NtQueryObject);
    if (res != 0)
       goto cleanup;
 

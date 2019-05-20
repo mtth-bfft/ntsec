@@ -6,8 +6,9 @@
 #include "include\nt.h"
 #include "include\directory.h"
 
-int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, DWORD dwRightsRequired, HANDLE *phOut)
+int open_nt_alpcconnectionport_object(PCTSTR swzNTPath, target_t *pTargetType, DWORD dwRightsRequired, HANDLE *phOut)
 {
+   UNREFERENCED_PARAMETER(pTargetType);
    int res = 0;
    NTSTATUS status = 0;
    PUNICODE_STRING pUSObjName = string_to_unicode(swzNTPath);
@@ -54,11 +55,12 @@ static int nt_obj_callback(PCTSTR swzNTPath, PUNICODE_STRING usObjType, PVOID pD
 {
    int res = 0;
    HANDLE hALPC = INVALID_HANDLE_VALUE;
+   target_t targetType = TARGET_ALPC_CONNECTION_PORT;
 
    if (_wcsnicmp(L"ALPC Port", usObjType->Buffer, usObjType->Length) != 0)
       return 0;
 
-   res = open_nt_alpcconnectionport_object(swzNTPath, *(PDWORD)pData, &hALPC);
+   res = open_nt_alpcconnectionport_object(swzNTPath, &targetType, *(PDWORD)pData, &hALPC);
    if (res == 0)
    {
       _tprintf(TEXT(" %s\n"), swzNTPath);
