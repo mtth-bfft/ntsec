@@ -809,7 +809,11 @@ int process_cmdline(int argc, PCWSTR argv[])
 
       res = open_target_by_typeid(swzTarget, TARGET_PROCESS, PROCESS_QUERY_INFORMATION, &hProcess);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: opening process %s to query its address space failed with code %u\n"),
+            swzTarget, res);
          goto cleanup;
+      }
 
       res = list_memmap(hProcess);
 

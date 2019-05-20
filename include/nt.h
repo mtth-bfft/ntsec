@@ -6,7 +6,7 @@
 // This file handles the NT-specific-and-internal aspects
 // These structures and functions are mostly undocumented and can change from one release to the next
 
-#define FILE_OPEN_IF 0x00000003
+#define FILE_OPEN 0x00000001
 #define FILE_OPEN_REPARSE_POINT 0x00200000
 
 #define OBJ_CASE_INSENSITIVE    0x00000040L
