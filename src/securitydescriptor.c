@@ -344,8 +344,12 @@ int print_target_sd(FILE *out, target_t *pTargetType, PCTSTR swzTarget)
    DWORD dwRes = 0;
    HANDLE hTarget = INVALID_HANDLE_VALUE;
    DWORD dwOpenRights = READ_CONTROL;
-   DWORD dwSDFlags = ATTRIBUTE_SECURITY_INFORMATION | ATTRIBUTE_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION;
+   DWORD dwSDFlags = DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION;
    PSECURITY_DESCRIPTOR pSD = NULL;
+   SE_OBJECT_TYPE objType = SE_KERNEL_OBJECT;
+
+   if (out == NULL || pTargetType == NULL || swzTarget == NULL)
+      return ERROR_INVALID_PARAMETER;
 
    // Dump SACL information, only possible when privileged enough
    if (has_privilege_caller(SE_SECURITY_NAME))
@@ -363,24 +367,43 @@ int print_target_sd(FILE *out, target_t *pTargetType, PCTSTR swzTarget)
       }
    }
 
-   res = open_target_by_typeid(swzTarget, pTargetType, dwOpenRights, &hTarget);
-   if (res != 0)
+   if (*pTargetType == TARGET_SERVICE)
    {
-      _ftprintf(stderr, TEXT(" [!] Error: opening object to print its SDDL failed with code %u\n"), res);
-      goto cleanup;
+      dwRes = GetNamedSecurityInfo(swzTarget, SE_SERVICE, dwSDFlags, NULL, NULL, NULL, NULL, &pSD);
+      if (dwRes != ERROR_SUCCESS)
+      {
+         res = dwRes;
+         _ftprintf(stderr, TEXT(" [!] Warning: unable to query security descriptor of service '%s' by name (error %u)\n"), swzTarget, res);
+         goto cleanup;
+      }
    }
-
-   dwRes = GetSecurityInfo(hTarget, SE_KERNEL_OBJECT, dwSDFlags, NULL, NULL, NULL, NULL, &pSD);
-   if (dwRes != ERROR_SUCCESS)
+   else
    {
-      res = GetLastError();
-      _ftprintf(stderr, TEXT(" [!] Warning: unable to query security descriptor (error %u)\n"), res);
-      goto cleanup;
+      dwSDFlags |= ATTRIBUTE_SECURITY_INFORMATION | SCOPE_SECURITY_INFORMATION;
+      res = open_target_by_typeid(swzTarget, pTargetType, dwOpenRights, &hTarget);
+      if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: opening object to print its SDDL failed with code %u\n"), res);
+         goto cleanup;
+      }
+
+      if (*pTargetType == TARGET_REGKEY)
+         objType = SE_REGISTRY_KEY;
+
+      dwRes = GetSecurityInfo(hTarget, objType, dwSDFlags, NULL, NULL, NULL, NULL, &pSD);
+      if (dwRes != ERROR_SUCCESS)
+      {
+         res = GetLastError();
+         _ftprintf(stderr, TEXT(" [!] Warning: unable to query security descriptor by handle (error %u)\n"), res);
+         goto cleanup;
+      }
    }
 
    res = print_sd(out, *pTargetType, pSD);
 
 cleanup:
+   if (hTarget != INVALID_HANDLE_VALUE)
+      CloseHandle(hTarget);
    if (pSD != NULL)
       LocalFree(pSD);
    return res;
