@@ -39,15 +39,16 @@ static void print_usage()
 {
    _ftprintf(stderr, TEXT("ntsec.exe [options] <operations>\n"));
    _ftprintf(stderr, TEXT("\n"));
-   _ftprintf(stderr, TEXT("Operations are processed *from left to right*. By default, the calling process is selected.\n"));
+   _ftprintf(stderr, TEXT("Operations are processed from commandline from left to right, or in --interactive mode.\n"));
    _ftprintf(stderr, TEXT("Some operations might fail because you lack some privileges, in which case you will be prompted\n"));
    _ftprintf(stderr, TEXT("to confirm an elevation operation, if one is deemed possible. To avoid hanging indefinitely in\n"));
    _ftprintf(stderr, TEXT("case user interaction is impossible, use `-n`.\n"));
    _ftprintf(stderr, TEXT("\n"));
-   _ftprintf(stderr, TEXT("Supported object types: process, thread, token, file, directory, namedpipe, pipe, filemap,\n"));
-   _ftprintf(stderr, TEXT("                        service, regkey, job, event, mutex, semaphore, timer, mempartition\n"));
+   _ftprintf(stderr, TEXT("Supported object types: ALPC port, object directory, event, file (file, directory, named pipe),\n"));
+   _ftprintf(stderr, TEXT("minifilter port, job, keyed event, memory partition, mutant, process, registry key, section,\n"));
+   _ftprintf(stderr, TEXT("semaphore, service, session, object symbolic link, and thread.\n"));
    _ftprintf(stderr, TEXT("\n"));
-   _ftprintf(stderr, TEXT("Select a securable object:\n"));
+   _ftprintf(stderr, TEXT("At startup, the calling process is selected. To select a target:\n"));
    _ftprintf(stderr, TEXT("      --nt         <nt_path>                   any NT object, by absolute NT path\n"));
    _ftprintf(stderr, TEXT("      --alpc       <nt_path>                   ALPC connection port, by absolute NT path\n"));
    _ftprintf(stderr, TEXT("      --directory  <nt_path>                   object directory, by absolute NT path\n"));
@@ -58,6 +59,7 @@ static void print_usage()
    _ftprintf(stderr, TEXT("      --keyedevent <nt_path>                   keyed event object, by absolute NT path\n"));
    _ftprintf(stderr, TEXT("      --partition  <nt_path>                   memory partition object, by absolute NT path\n"));
    _ftprintf(stderr, TEXT("      --mutant     <nt_path>                   mutant object, by absolute NT path\n"));
+   _ftprintf(stderr, TEXT("      --namedpipe  <nt_path>|<name>            named pipe file, by absolute NT path or name\n"));
    _ftprintf(stderr, TEXT("   -p --process    <pid>|<name>|current|caller process, by .exe name or id\n"));
    _ftprintf(stderr, TEXT("   -r --regkey     <nt_path>|<win32_path>      registry key, by NT or Win32 path\n"));
    _ftprintf(stderr, TEXT("      --section    <nt_path>                   section object, by absolute NT path\n"));
@@ -69,30 +71,29 @@ static void print_usage()
    _ftprintf(stderr, TEXT("      --timer      <nt_path>                   timer object, by absolute NT path\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Generic operations for all types:\n"));
-   _ftprintf(stderr, TEXT("      --sddl [new_sddl]         display (or replace) the security descriptor, as a SDDL string\n"));
-   _ftprintf(stderr, TEXT("      --show-sd                 show the security descriptor as text\n"));
-   _ftprintf(stderr, TEXT("      --explain-sd              show the security descriptor, describing each access right\n"));
+   _ftprintf(stderr, TEXT("      --sddl [new_sddl]         show (or replace) the security descriptor, as a SDDL string\n"));
+   _ftprintf(stderr, TEXT("      --sd                      show the security descriptor, as full text\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Operations on processes:\n"));
-   _ftprintf(stderr, TEXT("   --open-token                 select the process' primary token\n"));
-   _ftprintf(stderr, TEXT("   --list-mitigations           display status of each process mitigation policy\n"));
-   _ftprintf(stderr, TEXT("   --list-handles               list all open handles, their target and permissions\n"));
-   _ftprintf(stderr, TEXT("   --list-memmap                list all memory mappings and their permissions\n"));
+   _ftprintf(stderr, TEXT("      --open-token              select the process' primary token\n"));
+   _ftprintf(stderr, TEXT("      --list-mitigations        display status of each process mitigation policy\n"));
+   _ftprintf(stderr, TEXT("      --list-handles            list all open handles, their target and permissions\n"));
+   _ftprintf(stderr, TEXT("      --list-memmap             list all memory mappings and their permissions\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Operations on threads:\n"));
-   _ftprintf(stderr, TEXT("   --open-token                 select the thread' impersonation token, if any\n"));
+   _ftprintf(stderr, TEXT("      --open-token              select the thread' impersonation token, if any\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Operations on access tokens:\n"));
-   _ftprintf(stderr, TEXT("   --list-sids                  lists all SIDs held and their attributes\n"));
-   _ftprintf(stderr, TEXT("   --list-privs                 lists all privileges held and their status\n"));
-   _ftprintf(stderr, TEXT("   --show-token                 display user, groups, integrity, privileges, etc.\n"));
+   _ftprintf(stderr, TEXT("      --list-sids               lists all SIDs held and their attributes\n"));
+   _ftprintf(stderr, TEXT("      --list-privs              lists all privileges held and their status\n"));
+   _ftprintf(stderr, TEXT("      --show-token              display user, groups, integrity, privileges, etc.\n"));
    _ftprintf(stderr, TEXT("   -e --enable-priv  <name>     enable a disabled privilege (use * as wildcard)\n"));
    _ftprintf(stderr, TEXT("   -d --disable-priv <name>     disable an enabled privilege (use * as wildcard)\n"));
-   _ftprintf(stderr, TEXT("   --remove-priv     <name>     remove a privilege entirely (cannot be undone, use * as wildcard)\n"));
-   _ftprintf(stderr, TEXT("   --assign <tid>               set the given thread's impersonation token to be the selected token\n"));
-   _ftprintf(stderr, TEXT("   --impersonate                impersonate the selected token for operations that follow\n"));
+   _ftprintf(stderr, TEXT("      --remove-priv  <name>     remove a privilege entirely (cannot be undone, use * as wildcard)\n"));
+   _ftprintf(stderr, TEXT("      --assign <tid>            set the given thread's impersonation token to be the selected token\n"));
+   _ftprintf(stderr, TEXT("      --impersonate             impersonate the selected token for operations that follow\n"));
    _ftprintf(stderr, TEXT("                                (requires SeImpersonatePrivilege)\n"));
-   _ftprintf(stderr, TEXT("   --stop-impersonating         stop impersonating for operations that follow\n"));
+   _ftprintf(stderr, TEXT("      --stop-impersonating      stop impersonating for operations that follow\n"));
    _ftprintf(stderr, TEXT("   -x --execute <cmd>           create a process holding a copy of the selected token (requires an opened\n"));
    _ftprintf(stderr, TEXT("                                process with PROCESS_CREATE_PROCESS rights, or SeAssignPrimaryTokenPrivilege)\n"));
    _ftprintf(stderr, TEXT("\n"));
@@ -105,10 +106,6 @@ static void print_usage()
    _ftprintf(stderr, TEXT("   --ntobjs-with    [access_right]\n"));
    _ftprintf(stderr, TEXT("   --services-with  [access_right]\n"));
    _ftprintf(stderr, TEXT("   --anything-with  [access_right]\n"));
-   _ftprintf(stderr, TEXT("\n"));
-   _ftprintf(stderr, TEXT("Convenience function to explain security descriptors:\n"));
-   _ftprintf(stderr, TEXT("   --explain-sd  [type:]<sddl>  describe as text the given SDDL string, optionally with an object type\n"));
-   _ftprintf(stderr, TEXT("   --resolve-sid <sid>|<name>   resolve a name to a SID, and vice versa\n"));
    _ftprintf(stderr, TEXT("\n"));
    _ftprintf(stderr, TEXT("Options:\n"));
    _ftprintf(stderr, TEXT("   -i --interactive             pop an interactive pseudo-shell\n"));
@@ -284,7 +281,7 @@ int process_cmdline(int argc, PCWSTR argv[])
       swzTarget = argv[1];
       targetType = TARGET_FILE;
    }
-   else if (_tcsicmp(TEXT("filterport"), argv[0]) == 0)
+   else if (_tcsicmp(TEXT("filterport"), argv[0]) == 0 || _tcsicmp(TEXT("fltport"), argv[0]) == 0)
    {
       if (argc != 2)
       {
@@ -681,10 +678,16 @@ int process_cmdline(int argc, PCWSTR argv[])
 
       res = get_target_token(swzTarget, targetType, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &hToken);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: unable to open target token to impersonate it, code %u\n"), res);
          goto cleanup;
+      }
       res = set_impersonation_token(hToken);
       if (res != 0)
+      {
+         _ftprintf(stderr, TEXT(" [!] Error: unable to set impersonation token, code %u\n"), res);
          goto cleanup;
+      }
       _ftprintf(stderr, TEXT(" [.] Impersonating token temporarily\n"));
    }
    else if (_tcsicmp(TEXT("execute"), argv[0]) == 0 || _tcsicmp(TEXT("x"), argv[0]) == 0)
