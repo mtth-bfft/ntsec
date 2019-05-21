@@ -63,12 +63,16 @@ int open_nt_key_object(PCTSTR swzNTorWin32Path, target_t *pTargetType, DWORD dwR
       hRoot = HKEY_USERS;
       swzWin32Path = swzNTorWin32Path + _tcslen(TEXT("HKEY_USERS"));
    }
+
+   // Strip any leading '\'
+   if (swzWin32Path != NULL && *swzWin32Path == TEXT('\\'))
+      swzWin32Path++;
    
    // Is it a Win32 path?
    if (swzWin32Path != NULL)
    {
       //TODO: replace with a nice formatting directly to NT path, avoid Win32 APi
-      res = RegOpenKey(hRoot, swzWin32Path, (PHKEY)phOut);
+      res = RegOpenKeyEx(hRoot, swzWin32Path, REG_OPTION_OPEN_LINK, dwRightsRequired, (PHKEY)phOut);
    }
    // Otherwise, it must be a NT absolute path
    else

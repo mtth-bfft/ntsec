@@ -49,7 +49,7 @@ int print_resolved_sid(FILE *out, PSID pSID)
       GetLastError() != ERROR_INSUFFICIENT_BUFFER)
    {
       res = GetLastError();
-      _ftprintf(out, TEXT("unknown SID (code %u)"), res);
+      _ftprintf(out, TEXT("unresolved SID, code %u"), res);
       goto cleanup;
    }
    swzAccount = safe_alloc(dwAccountLen * sizeof(WCHAR));
@@ -57,7 +57,7 @@ int print_resolved_sid(FILE *out, PSID pSID)
    if (!LookupAccountSidW(NULL, pSID, swzAccount, &dwAccountLen, swzDomain, &dwDomainLen, &sidUse))
    {
       res = GetLastError();
-      _ftprintf(out, TEXT("unknown SID (code %u)"), res);
+      _ftprintf(out, TEXT("unresolved SID, code %u"), res);
       goto cleanup;
    }
    _ftprintf(out, TEXT("%ws\\%ws"), swzDomain, swzAccount);
